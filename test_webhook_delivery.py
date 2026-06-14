@@ -200,7 +200,7 @@ def send_webhook_test(
                 "variant_id": 1234567890,
                 "title": "Classic Tee",
                 "quantity": 2,
-                "sku": "CLASSIC-BLACK-M",
+                "sku": "",  # Will match by design name + colour + size
                 "variant_title": None,
                 "vendor": "stoic-social",
                 "fulfillment_service": "manual",
@@ -215,6 +215,9 @@ def send_webhook_test(
                 "fulfillment_status": None,
                 "grams": 200,
                 "price": "49.99",
+                "option1": None,
+                "option2": "Black",  # Colour
+                "option3": "M",      # Size
                 "price_set": {
                     "shop_money": {
                         "amount": "49.99",
