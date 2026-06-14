@@ -7,6 +7,7 @@ from typing import Any
 import openpyxl
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
+from django.db.models import F
 
 from core.models import BlankSKU, Design, PrintedSKU
 
@@ -62,6 +63,11 @@ class Command(BaseCommand):
             help="Replace existing on_hand values for imported keys (recommended for current snapshot imports).",
         )
         parser.add_argument(
+            "--reset-existing",
+            action="store_true",
+            help="Delete all existing BlankSKU and PrintedSKU rows before import.",
+        )
+        parser.add_argument(
             "--dry-run",
             action="store_true",
             help="Parse and report only; do not write to database.",
@@ -79,6 +85,7 @@ class Command(BaseCommand):
         printed_sheet: str = options["printed_sheet"]
         dry_run: bool = options["dry_run"]
         replace: bool = options["replace"]
+        reset_existing: bool = options["reset_existing"]
 
         for sheet in plain_sheets + [printed_sheet]:
             if sheet not in workbook.sheetnames:
@@ -94,6 +101,12 @@ class Command(BaseCommand):
         if dry_run:
             self.stdout.write(self.style.WARNING("Dry-run enabled: no DB writes performed."))
             return
+
+        if reset_existing:
+            self.stdout.write(self.style.WARNING("Resetting existing BlankSKU and PrintedSKU on_hand to reserved..."))
+            with transaction.atomic():
+                PrintedSKU.objects.update(on_hand=F("reserved"))
+                BlankSKU.objects.update(on_hand=F("reserved"))
 
         blank_updates = self._apply_plain_inventory(plain_aggregate, replace=replace)
         printed_updates = self._apply_printed_inventory(printed_rows, replace=replace)
