@@ -1,0 +1,31 @@
+{
+  "id": 9900000001001,
+  "name": "#WH-1001",
+  "email": "ops-test-create@example.com",
+  "tags": "webhook-demo,mixed-order,updated",
+  "fulfillment_status": null,
+  "customer": {
+    "first_name": "Webhook",
+    "last_name": "Demo"
+  },
+  "line_items": [
+    {
+      "id": 9900000010011,
+      "title": "Amrutham & Chill",
+      "product_title": "Amrutham & Chill",
+      "variant_title": "",
+      "quantity": 2,
+      "color": "White",
+      "size": "L"
+    },
+    {
+      "id": 9900000010012,
+      "title": "Bro I Don't Care",
+      "product_title": "Bro I Don't Care",
+      "variant_title": "",
+      "quantity": 2,
+      "color": "Red",
+      "size": "S"
+    }
+  ]
+}

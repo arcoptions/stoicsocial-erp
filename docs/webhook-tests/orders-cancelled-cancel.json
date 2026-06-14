@@ -1,0 +1,12 @@
+{
+  "id": 9900000001002,
+  "name": "#WH-1002",
+  "cancelled_at": "2026-06-11T10:30:00Z",
+  "cancel_reason": "customer",
+  "fulfillment_status": null,
+  "line_items": [
+    {
+      "id": 9900000010021
+    }
+  ]
+}

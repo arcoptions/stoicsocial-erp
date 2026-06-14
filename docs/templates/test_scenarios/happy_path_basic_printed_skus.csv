@@ -1,0 +1,4 @@
+design_name,variant,colour,size,on_hand,reserved,buffer_min,buffer_target,buffer_max,blank_fabric
+"My First T-Shirt",,Black,S,10,0,3,10,20,180 GSM
+"My First T-Shirt",,Black,M,15,0,3,10,20,180 GSM
+"My First T-Shirt",,Black,L,8,0,3,10,20,180 GSM

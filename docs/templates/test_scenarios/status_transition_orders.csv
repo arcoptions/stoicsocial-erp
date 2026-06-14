@@ -1,0 +1,4 @@
+shopify_order_id,order_no,customer_name,email,shopify_line_id,product_name,variant,colour,size,quantity,status,line_status,fulfillment_status,delivery_status,tags
+ST-001,#ST001,Status One,status1@example.com,ST-001-L1,Status Test Design,,Black,S,1,needs_printing,to_be_printed,unfulfilled,pending,test,status
+ST-002,#ST002,Status Two,status2@example.com,ST-002-L1,Status Test Design,,Black,M,2,in_printing,in_printing,unfulfilled,in_transit,test,status
+ST-003,#ST003,Status Three,status3@example.com,ST-003-L1,Status Test Design,,Black,S,1,ready_to_ship,ready_to_ship,fulfilled,in_transit,test,status

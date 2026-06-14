@@ -1,0 +1,2 @@
+design_name,product_type,sub_category,material,fit,colour,colour_hex,blank_fabric,artwork_url,mockup_url,print_areas,placement_note
+"Classic Print",Tshirt,Regular,Cotton,Regular,Black,#1b1b1b,180 GSM,https://example.com/classic.png,https://example.com/classic_mockup.png,Front,Center

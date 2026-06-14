@@ -1,0 +1,4 @@
+fabric,colour,size,on_hand,reserved,reorder_min,reorder_target
+180 GSM,Black,S,50,0,10,30
+180 GSM,Black,M,50,0,10,30
+180 GSM,Black,L,50,0,10,30

@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Order {{ order.order_no|default:order.shopify_order_id }} | BoldERP{% endblock %}
+
+{% block content %}
+<div style="margin-bottom:12px;">
+  <a href="{% url 'order-list' %}" style="color:#6b7280;font-size:14px;">← Back to Orders</a>
+</div>
+
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">
+    <div>
+      <h2 style="margin:0 0 4px;">{{ order.order_no|default:order.shopify_order_id }}</h2>
+      <p class="muted" style="margin:0;">Shopify ID: {{ order.shopify_order_id }}</p>
+    </div>
+    <span class="status-badge status-{{ order.status }}" style="font-size:14px;padding:6px 14px;">
+      {{ order.get_status_display }}
+    </span>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px;margin-top:20px;">
+    <div>
+      <p class="muted" style="margin:0 0 2px;font-size:12px;">CUSTOMER</p>
+      <p style="margin:0;font-weight:600;">{{ order.customer_name|default:"—" }}</p>
+      <p class="muted" style="margin:0;font-size:13px;">{{ order.email|default:"" }}</p>
+    </div>
+    <div>
+      <p class="muted" style="margin:0 0 2px;font-size:12px;">CREATED</p>
+      <p style="margin:0;font-weight:600;">{{ order.created_at|date:"d M Y, H:i" }}</p>
+    </div>
+    <div>
+      <p class="muted" style="margin:0 0 2px;font-size:12px;">TAGS</p>
+      <p style="margin:0;">
+        {% for tag in order.tags %}
+          <span style="display:inline-block;background:#f3eef8;color:#5a2a8a;padding:2px 8px;border-radius:99px;font-size:12px;margin:2px;">{{ tag }}</span>
+        {% empty %}—{% endfor %}
+      </p>
+    </div>
+    <div>
+      <p class="muted" style="margin:0 0 2px;font-size:12px;">FULFILMENT</p>
+      <p style="margin:0;font-weight:600;">{{ order.shopify_fulfillment_status|default:"—" }}</p>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Line Items</h2>
+
+  {% if status_counts %}
+  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
+    {% for status, count in status_counts.items %}
+    <span style="background:#f3f4f6;padding:4px 12px;border-radius:8px;font-size:13px;">
+      <strong>{{ count }}</strong> × {{ status|title }}
+    </span>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div style="overflow-x:auto;">
+    <table>
+      <thead>
+        <tr>
+          <th>Product</th>
+          <th>Variant</th>
+          <th>Colour</th>
+          {% for size in sizes %}
+          <th>{{ size }}</th>
+          {% endfor %}
+          <th>Statuses</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for line in grouped_lines %}
+        <tr>
+          <td><strong>{{ line.product_name }}</strong></td>
+          <td>{{ line.variant }}</td>
+          <td>{{ line.colour }}</td>
+          {% for value in line.size_cells %}
+          <td style="text-align:center;">{{ value }}</td>
+          {% endfor %}
+          <td>
+            {% for status in line.statuses %}
+            <span class="status-badge" style="margin:2px 4px 2px 0;">{{ status }}</span>
+            {% endfor %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="20" style="text-align:center;color:#6b7280;">No line items found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<style>
+.status-badge { display:inline-block;padding:3px 10px;border-radius:99px;font-size:12px;font-weight:600; }
+.status-new, .line-new              { background:#eef7ee; color:#2a6e2a; }
+.status-needs_printing              { background:#fdf5e0; color:#8a5a10; }
+.line-to_be_printed                 { background:#fdf5e0; color:#8a5a10; }
+.status-in_printing, .line-in_printing { background:#e8f0fc; color:#1e4a8a; }
+.status-ready_to_ship, .line-ready_ship { background:#f3eef8; color:#5a2a8a; }
+.status-shipped, .line-shipped      { background:#e8f5f0; color:#1a6040; }
+.status-cancelled, .line-cancelled  { background:#fdf0ee; color:#8a2a18; }
+</style>
+{% endblock %}

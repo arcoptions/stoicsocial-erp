@@ -1,0 +1,9 @@
+shopify_order_id,order_no,customer_name,email,shopify_line_id,product_name,variant,colour,size,quantity,status,line_status,fulfillment_status,delivery_status,tags
+MD-001,#MD001,Customer One,cust1@example.com,MD-001-L1,Design A - Pattern,,Black,M,2,needs_printing,to_be_printed,unfulfilled,pending,test,multi-design
+MD-002,#MD002,Customer Two,cust2@example.com,MD-002-L1,Design A - Pattern,,White,S,1,needs_printing,to_be_printed,unfulfilled,pending,test,multi-design
+MD-003,#MD003,Customer Three,cust3@example.com,MD-003-L1,Design B - Art,,Navy,L,3,needs_printing,to_be_printed,unfulfilled,pending,test,multi-design
+MD-004,#MD004,Customer Four,cust4@example.com,MD-004-L1,Design B - Art,,Red,M,2,needs_printing,to_be_printed,unfulfilled,pending,test,multi-design
+MD-005,#MD005,Customer Five,cust5@example.com,MD-005-L1,Design C - Quote,,Black,S,4,needs_printing,to_be_printed,unfulfilled,pending,test,multi-design
+MD-006,#MD006,Customer Six,cust6@example.com,MD-006-L1,Design A - Pattern,,Black,L,1,needs_printing,to_be_printed,unfulfilled,pending,test,multi-design
+MD-007,#MD007,Customer Seven,cust7@example.com,MD-007-L1,Design C - Quote,,Black,M,2,needs_printing,to_be_printed,unfulfilled,pending,test,multi-design
+MD-008,#MD008,Customer Eight,cust8@example.com,MD-008-L1,Design B - Art,,Navy,S,3,needs_printing,to_be_printed,unfulfilled,pending,test,multi-design

@@ -1,0 +1,22 @@
+{
+  "id": 9900000001002,
+  "name": "#WH-1002",
+  "email": "ops-test-cancel@example.com",
+  "tags": "webhook-demo,cancel-order",
+  "fulfillment_status": null,
+  "customer": {
+    "first_name": "Webhook",
+    "last_name": "Cancel"
+  },
+  "line_items": [
+    {
+      "id": 9900000010021,
+      "title": "Bro I Don't Care",
+      "product_title": "Bro I Don't Care",
+      "variant_title": "",
+      "quantity": 1,
+      "color": "Red",
+      "size": "S"
+    }
+  ]
+}

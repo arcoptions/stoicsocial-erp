@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Print Pack {{ print_job.id }}</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 12mm;
+    }
+    body {
+      font-family: "Segoe UI", sans-serif;
+      color: #212529;
+      font-size: 11px;
+    }
+    h1 {
+      margin: 0 0 4mm 0;
+      font-size: 20px;
+    }
+    .meta {
+      margin-bottom: 6mm;
+      padding: 4mm;
+      border: 1px solid #d7dce1;
+      background: #f8f9fb;
+    }
+    .meta-row {
+      display: flex;
+      gap: 8mm;
+      margin-bottom: 2mm;
+      flex-wrap: wrap;
+    }
+    .label {
+      font-weight: 700;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+    th, td {
+      border: 1px solid #d9d9d9;
+      padding: 8px;
+      vertical-align: top;
+      word-wrap: break-word;
+    }
+    th {
+      background: #f5f5f5;
+      text-align: left;
+    }
+    tr {
+      page-break-inside: avoid;
+    }
+    .mockup {
+      height: 120px;
+      width: auto;
+      object-fit: contain;
+      display: block;
+      margin: 0 auto;
+    }
+    .mockup-missing {
+      height: 120px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px dashed #b8c2cc;
+      color: #6c757d;
+      text-align: center;
+      padding: 6px;
+    }
+    .qr {
+      width: 96px;
+      height: 96px;
+      display: block;
+      margin: 0 auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>Print Pack</h1>
+  <div class="meta">
+    <div class="meta-row"><span class="label">Job ID:</span> <span>{{ print_job.id }}</span></div>
+    <div class="meta-row"><span class="label">Vendor:</span> <span>{{ vendor.name }}</span></div>
+    <div class="meta-row"><span class="label">Sent Date:</span> <span>{% if sent_date %}{{ sent_date|date:"Y-m-d H:i" }}{% else %}-{% endif %}</span></div>
+    <div class="meta-row"><span class="label">Total Units:</span> <span>{{ total_units }}</span></div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Design</th>
+        <th>Variant</th>
+        <th>Colour</th>
+        <th>Size</th>
+        <th>Qty</th>
+        <th>Mockup</th>
+        <th>QR</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for line in lines %}
+      <tr>
+        <td>{{ line.design }}</td>
+        <td>{{ line.variant }}</td>
+        <td>{{ line.colour }}</td>
+        <td>{{ line.size }}</td>
+        <td>{{ line.qty }}</td>
+        <td>
+          {% if line.has_mockup %}
+          <img class="mockup" src="{{ line.mockup_url }}" alt="Mockup for {{ line.design }}" />
+          {% else %}
+          <div class="mockup-missing">Mockup not available</div>
+          {% endif %}
+        </td>
+        <td><img class="qr" src="{{ line.qr_code }}" alt="QR for {{ line.id }}" /></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</body>
+</html>

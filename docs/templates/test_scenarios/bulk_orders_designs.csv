@@ -1,0 +1,2 @@
+design_name,product_type,sub_category,material,fit,colour,colour_hex,blank_fabric,artwork_url,mockup_url,print_areas,placement_note
+"Bulk Test Design",Tshirt,Regular,Cotton,Regular,Black,#1b1b1b,180 GSM,https://example.com/bulk.png,https://example.com/bulk_mockup.png,Front,Bulk test

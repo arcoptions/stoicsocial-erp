@@ -1,0 +1,10 @@
+design_name,variant,colour,size,on_hand,reserved,buffer_min,buffer_target,buffer_max,blank_fabric
+"Raasi Phalalu",,Black,S,12,0,3,10,20,180 GSM
+"Raasi Phalalu",,Black,M,15,0,3,10,20,180 GSM
+"Raasi Phalalu",,Black,L,10,0,3,10,20,180 GSM
+"Raasi Phalalu",,White,S,8,0,3,8,15,180 GSM
+"Raasi Phalalu",,White,M,11,0,3,8,15,180 GSM
+"Raasi Phalalu",,White,L,9,0,3,8,15,180 GSM
+"Raasi Phalalu",,Navy,S,5,0,2,7,12,180 GSM
+"Raasi Phalalu",,Navy,M,7,0,2,7,12,180 GSM
+"Raasi Phalalu",,Navy,L,6,0,2,7,12,180 GSM

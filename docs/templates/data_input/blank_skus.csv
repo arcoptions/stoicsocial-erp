@@ -1,0 +1,13 @@
+fabric,colour,size,on_hand,reserved,reorder_min,reorder_target
+180 GSM,Black,S,120,0,20,80
+180 GSM,Black,M,120,0,20,80
+180 GSM,Black,L,120,0,20,80
+180 GSM,Black,XL,120,0,20,80
+180 GSM,Black,XXL,120,0,20,80
+180 GSM,Black,XXXL,120,0,20,80
+180 GSM,White,S,80,0,15,60
+180 GSM,White,M,80,0,15,60
+180 GSM,White,L,80,0,15,60
+180 GSM,White,XL,80,0,15,60
+180 GSM,White,XXL,80,0,15,60
+180 GSM,White,XXXL,80,0,15,60

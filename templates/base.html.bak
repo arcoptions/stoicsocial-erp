@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  {% load static %}
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}Bold &amp; Italic Ops{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400;1,600&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bi-cream:      #f4f4f4;
+      --bi-parchment:  #ececec;
+      --bi-terra:      #0f0f0f;
+      --bi-terra-dark: #000000;
+      --bi-ink:        #0f0f0f;
+      --bi-mid:        #5f5f5f;
+      --bi-border:     #d8d8d8;
+      --bi-white:      #ffffff;
+      --bi-card-bg:    #ffffff;
+      --sidebar-bg:    #1a1a1a;
+      --sidebar-text:  #e0e0e0;
+    }
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: "DM Sans", "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 0;
+      background: var(--bi-cream);
+      color: var(--bi-ink);
+      line-height: 1.6;
+      font-size: 14px;
+      display: flex;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--bi-ink);
+      padding: 0 28px;
+    }
+    nav {
+      display: flex;
+      gap: 4px;
+      align-items: stretch;
+      flex-wrap: wrap;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    .bi-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 0;
+      text-decoration: none;
+      margin-right: 16px;
+    }
+    .bi-brand-b {
+      font-family: "Cormorant Garamond", serif;
+      font-style: italic;
+      font-size: 32px;
+      font-weight: 600;
+      color: var(--bi-terra);
+      line-height: 1;
+    }
+    .bi-brand-text { display: flex; flex-direction: column; line-height: 1.2; }
+    .bi-brand-name {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.22em;
+      color: #d7d7d7;
+      text-transform: uppercase;
+    }
+    .bi-brand-sub {
+      font-size: 9px;
+      font-weight: 500;
+      letter-spacing: 0.14em;
+      color: #9a9a9a;
+      text-transform: uppercase;
+    }
+    nav a.nav-link {
+      text-decoration: none;
+      color: #cdcdcd;
+      font-weight: 500;
+      font-size: 13px;
+      letter-spacing: 0.02em;
+      padding: 0 14px;
+      display: flex;
+      align-items: center;
+      border-bottom: 3px solid transparent;
+      transition: color 0.18s, border-color 0.18s;
+    }
+    nav a.nav-link:hover, nav a.nav-link.active {
+      color: #ffffff;
+      border-bottom-color: var(--bi-terra);
+    }
+    .nav-logout { margin-left: auto; font-size: 12px !important; color: #9a9a9a !important; }
+    .nav-logout:hover { color: #f0f0f0 !important; border-bottom-color: transparent !important; }
+    .nav-logout-form { margin-left: auto; display: flex; align-items: stretch; }
+    .nav-logout-btn {
+      background: none;
+      border: 0;
+      padding: 0 14px;
+      color: #9a9a9a;
+      font-family: "DM Sans", sans-serif;
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      border-bottom: 3px solid transparent;
+      transition: color 0.18s;
+    }
+    .nav-logout-btn:hover { color: #f0f0f0; background: none; }
+
+    /* ── Main ── */
+    main, .shell {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 28px 24px;
+    }
+
+    /* ── Messages ── */
+    .messages { margin-bottom: 20px; }
+    .message, .flash {
+      padding: 12px 18px;
+      border-radius: 6px;
+      margin-bottom: 10px;
+      border-left: 4px solid #111111;
+      background: #f3f3f3;
+      color: #222222;
+      font-size: 14px;
+    }
+    .message.success  { background: #f2f2f2; border-color: #222222; color: #1a1a1a; }
+    .message.error    { background: #f8f8f8; border-color: #111111; color: #111111; }
+    .message.warning  { background: #f4f4f4; border-color: #333333; color: #202020; }
+    .message.info     { background: #f5f5f5; border-color: #2f2f2f; color: #1f1f1f; }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--bi-card-bg);
+      border: 1px solid var(--bi-border);
+      border-radius: 10px;
+      padding: 22px 24px;
+      margin-bottom: 20px;
+    }
+    .card h2 {
+      margin: 0 0 6px;
+      font-family: "Cormorant Garamond", serif;
+      font-size: 22px;
+      font-weight: 600;
+      color: var(--bi-ink);
+    }
+    .card h3 {
+      font-family: "Cormorant Garamond", serif;
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--bi-ink);
+    }
+    .card > p:first-of-type { margin-top: 0; }
+
+    h1, h2, h3 { font-family: "Cormorant Garamond", serif; }
+    .muted { color: var(--bi-mid); font-size: 13px; }
+
+    /* ── Table ── */
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    tr th, tr td, th, td {
+      border: 1px solid var(--bi-border);
+      padding: 11px 14px;
+      text-align: left;
+      vertical-align: top;
+      font-size: 14px;
+    }
+    tr th, th {
+      background: var(--bi-parchment);
+      font-family: "DM Sans", sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--bi-mid);
+    }
+    tr:nth-child(even) { background: #fafafa; }
+    tr:hover { background: #f0f0f0; }
+
+    /* ── Links ── */
+    a { text-decoration: none; color: var(--bi-terra); }
+    a:hover { text-decoration: underline; color: var(--bi-terra-dark); }
+
+    /* ── Buttons ── */
+    button, input[type="submit"] {
+      padding: 9px 20px;
+      border: 0;
+      border-radius: 6px;
+      background: var(--bi-ink);
+      color: #fff;
+      font-family: "DM Sans", sans-serif;
+      font-weight: 600;
+      font-size: 13px;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      transition: background 0.18s;
+    }
+    button:hover, input[type="submit"]:hover { background: #2e2010; }
+    button:disabled, input[type="submit"]:disabled { background: #c4b4a0; cursor: not-allowed; }
+
+    /* ── Inputs ── */
+    input, select, textarea {
+      padding: 9px 12px;
+      border: 1px solid var(--bi-border);
+      border-radius: 6px;
+      font-family: "DM Sans", inherit;
+      font-size: 13px;
+      color: var(--bi-ink);
+      background: #fff;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: var(--bi-terra);
+      box-shadow: 0 0 0 3px rgba(30, 30, 30, 0.12);
+    }
+
+    /* ── Status badges ── */
+    .status-badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 99px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      font-family: "DM Sans", sans-serif;
+    }
+    .status-new              { background: #f1f1f1; color: #242424; }
+    .status-needs_printing   { background: #ececec; color: #1f1f1f; }
+    .status-in_printing      { background: #e8e8e8; color: #202020; }
+    .status-ready_to_ship    { background: #e4e4e4; color: #111111; }
+    .status-shipped          { background: #dcdcdc; color: #101010; }
+    .status-cancelled        { background: #efefef; color: #000000; }
+
+    @media (max-width: 768px) {
+      header { padding: 0 16px; }
+      .bi-brand { padding: 12px 0; }
+      nav a.nav-link { padding: 12px 10px; font-size: 12px; }
+      main, .shell { padding: 16px; }
+      table { font-size: 12px; }
+      tr th, tr td, th, td { padding: 8px 10px; }
+    }
+  </style>
+  {% block extra_css %}{% endblock %}
+</head>
+<body>
+  <header>
+    <nav>
+      <a href="{% url 'order-list' %}" class="bi-brand" title="Bold &amp; Italic ERP">
+        <svg xmlns="http://www.w3.org/2000/svg" width="146" height="34" viewBox="0 0 176 64" role="img" aria-label="Bold and Italic ERP" style="display:block; height:34px; width:auto;">
+          <rect width="176" height="64" fill="none"/>
+          <text x="6" y="48" fill="#ffffff" font-size="54" font-family="Georgia, Times New Roman, serif" font-style="italic" font-weight="700">B</text>
+          <text x="44" y="27" fill="#ffffff" font-size="11" font-family="Arial, Helvetica, sans-serif" font-weight="700" letter-spacing="2.4">BOLD &amp; ITALIC</text>
+          <text x="44" y="43" fill="#d7d7d7" font-size="9" font-family="Arial, Helvetica, sans-serif" font-weight="600" letter-spacing="2.1">ERP</text>
+        </svg>
+      </a>
+      {% if can_admin %}
+      <a href="/admin/" class="nav-link">Admin</a>
+      {% endif %}
+      {% if can_inventory %}
+      <a href="{% url 'order-list' %}" class="nav-link">Inventory Orders</a>
+      <a href="{% url 'print-batch-suggest' %}" class="nav-link">Print Batches</a>
+      <a href="{% url 'receive-dashboard' %}" class="nav-link">Receive</a>
+      <a href="{% url 'forecast' %}" class="nav-link">Forecast</a>
+      <a href="{% url 'adjust-inventory' %}" class="nav-link">Adjust Stock</a>
+      <a href="{% url 'audit-log' %}" class="nav-link">Audit Log</a>
+      {% endif %}
+      {% if can_sales %}
+      <a href="{% url 'sales-dashboard' %}" class="nav-link">Sales</a>
+      {% endif %}
+      {% if can_finance %}
+      <a href="{% url 'finance-dashboard' %}" class="nav-link">Finance</a>
+      {% endif %}
+      <form method="post" action="/accounts/logout/" class="nav-logout-form">
+        {% csrf_token %}
+        <button type="submit" class="nav-logout-btn">Logout</button>
+      </form>
+    </nav>
+  </header>
+
+  <main>
+    {% if messages %}
+    <div class="messages">
+      {% for message in messages %}
+      <div class="message {{ message.tags }}">{{ message }}</div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

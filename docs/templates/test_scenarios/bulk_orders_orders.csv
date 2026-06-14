@@ -1,0 +1,6 @@
+shopify_order_id,order_no,customer_name,email,shopify_line_id,product_name,variant,colour,size,quantity,status,line_status,fulfillment_status,delivery_status,tags
+BULK-001,#BULK001,Corporate Buyer 1,corp1@example.com,BULK-001-L1,Bulk Test Design,,Black,S,50,needs_printing,to_be_printed,unfulfilled,pending,test,bulk
+BULK-002,#BULK002,Corporate Buyer 2,corp2@example.com,BULK-002-L1,Bulk Test Design,,Black,M,60,needs_printing,to_be_printed,unfulfilled,pending,test,bulk
+BULK-003,#BULK003,Corporate Buyer 3,corp3@example.com,BULK-003-L1,Bulk Test Design,,Black,L,75,needs_printing,to_be_printed,unfulfilled,pending,test,bulk
+BULK-004,#BULK004,Corporate Buyer 4,corp4@example.com,BULK-004-L1,Bulk Test Design,,Black,S,40,needs_printing,to_be_printed,unfulfilled,pending,test,bulk
+BULK-005,#BULK005,Corporate Buyer 5,corp5@example.com,BULK-005-L1,Bulk Test Design,,Black,M,45,needs_printing,to_be_printed,unfulfilled,pending,test,bulk

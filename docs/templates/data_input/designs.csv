@@ -1,0 +1,4 @@
+design_name,product_type,sub_category,material,fit,colour,colour_hex,blank_fabric,artwork_url,mockup_url,print_areas,placement_note,notes
+Amrutham & Chill,Tshirt,Regular,Cotton,Regular,Black,#1b1b1b,180 GSM,https://example.com/artwork/amrutham-black.png,https://example.com/mockup/amrutham-black.png,Front,Center chest placement,
+Amrutham & Chill,Tshirt,Regular,Cotton,Regular,White,#ffffff,180 GSM,https://example.com/artwork/amrutham-white.png,https://example.com/mockup/amrutham-white.png,Front,Center chest placement,
+Ugadi Telugu Raasi Phalalu,Tshirt,Regular,Cotton,Regular,Black,#1b1b1b,180 GSM,https://example.com/artwork/ugadi-black.png,https://example.com/mockup/ugadi-black.png,Front,Center chest placement,Variants handled in printed_skus.csv

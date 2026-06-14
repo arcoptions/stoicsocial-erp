@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Receive | BoldERP{% endblock %}
+
+{% block content %}
+<div class="card">
+  <h2>Receive Print Jobs</h2>
+  <p class="muted">Capture received quantities by size. Defective/missing can be recorded separately for each size line.</p>
+</div>
+
+{% if job_cards %}
+  {% for card in job_cards %}
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">
+      <div>
+        <h3 style="margin:0 0 4px;">Batch {% if card.job.batch %}{{ card.job.batch.id|stringformat:"s"|slice:":8" }}…{% else %}—{% endif %} — {{ card.job.vendor.name }}</h3>
+        <p class="muted" style="margin:0;">
+          Sent: {{ card.job.sent_at|date:"d M Y"|default:"—" }} &nbsp;|&nbsp;
+          Status: <strong>{{ card.job.get_status_display }}</strong>
+        </p>
+      </div>
+      <form method="post" action="{% url 'receive-job-all-good' card.job.id %}" style="display:inline;">
+        {% csrf_token %}
+        <button type="submit" style="padding:8px 12px;font-weight:700;background:#2196f3;color:#fff;border:none;border-radius:4px;cursor:pointer;">
+          Receive All as Good
+        </button>
+      </form>
+    </div>
+
+    <div style="overflow-x:auto;margin-top:12px;">
+      <table>
+        <thead>
+          <tr>
+            <th>Design</th>
+            <th>Variant</th>
+            <th>Colour</th>
+            {% for size in card.sizes %}
+            <th>{{ size }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in card.rows %}
+          <tr>
+            <td>{{ row.design_name }}</td>
+            <td>{{ row.variant }}</td>
+            <td>{{ row.colour }}</td>
+            {% for line in row.size_cells %}
+            <td>
+              {% if line %}
+                <div style="min-width:205px;font-size:12px;">
+                  <div style="font-size:12px;color:#111827;font-weight:700;margin-bottom:4px;">Size {{ line.printed_sku.size|default:"NA" }}</div>
+                  <div class="muted" style="font-size:12px;margin-bottom:8px;">
+                    Sent: <strong>{{ line.qty_sent }}</strong><br>
+                    Received: Good {{ line.qty_received_good }} + Def {{ line.qty_received_defective }}
+                  </div>
+
+                  {% if line.qty_received_good == 0 and line.qty_received_defective == 0 %}
+                  <form method="post" action="{% url 'receive-line' line.id %}" style="display:flex;flex-direction:column;gap:6px;">
+                    {% csrf_token %}
+                    <div>
+                      <label style="font-weight:700;display:block;margin-bottom:4px;">Defective or Missing?</label>
+                      <input
+                        type="number"
+                        name="qty_defective"
+                        min="0"
+                        max="{{ line.qty_sent }}"
+                        value="0"
+                        required
+                        style="width:100%;padding:6px;box-sizing:border-box;"
+                      >
+                      <div class="muted" style="font-size:11px;margin-top:2px;">Remaining units are auto-marked as good.</div>
+                    </div>
+                    <textarea
+                      name="notes"
+                      placeholder="Optional note for this size line"
+                      style="width:100%;padding:6px;box-sizing:border-box;font-size:12px;font-family:inherit;"
+                      rows="2"
+                    ></textarea>
+                    <button type="submit" style="padding:8px;font-weight:700;background:#4caf50;color:#fff;border:none;border-radius:4px;cursor:pointer;">
+                      Receive Size {{ line.printed_sku.size|default:"NA" }}
+                    </button>
+                  </form>
+                  {% else %}
+                  <span style="color:#15803d;font-weight:700;">Received</span>
+                  {% endif %}
+                </div>
+              {% else %}
+                <span class="muted">—</span>
+              {% endif %}
+            </td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endfor %}
+{% else %}
+<div class="card" style="text-align:center;color:#6b7280;padding:40px;">
+  No print jobs are currently pending receive.<br>
+  <a href="{% url 'print-batch-suggest' %}" style="display:inline-block;margin-top:12px;">Go to Print Batches →</a>
+</div>
+{% endif %}
+{% endblock %}

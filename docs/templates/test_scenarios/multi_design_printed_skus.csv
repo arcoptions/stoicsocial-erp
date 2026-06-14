@@ -1,0 +1,16 @@
+design_name,variant,colour,size,on_hand,reserved,buffer_min,buffer_target,buffer_max,blank_fabric
+"Design A - Pattern",,Black,S,12,0,3,10,20,180 GSM
+"Design A - Pattern",,Black,M,12,0,3,10,20,180 GSM
+"Design A - Pattern",,Black,L,10,0,3,10,20,180 GSM
+"Design A - Pattern",,Black,XL,5,0,2,5,10,180 GSM
+"Design A - Pattern",,White,S,10,0,3,8,15,180 GSM
+"Design A - Pattern",,White,M,10,0,3,8,15,180 GSM
+"Design A - Pattern",,White,L,8,0,3,8,15,180 GSM
+"Design B - Art",,Navy,S,9,0,3,9,18,180 GSM
+"Design B - Art",,Navy,M,9,0,3,9,18,180 GSM
+"Design B - Art",,Navy,L,7,0,3,9,18,180 GSM
+"Design B - Art",,Red,S,7,0,2,7,14,180 GSM
+"Design B - Art",,Red,M,7,0,2,7,14,180 GSM
+"Design C - Quote",,Black,S,15,0,4,12,25,180 GSM
+"Design C - Quote",,Black,M,15,0,4,12,25,180 GSM
+"Design C - Quote",,Black,L,12,0,4,12,25,180 GSM

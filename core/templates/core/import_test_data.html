@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}Import Test Data | BoldERP{% endblock %}
+
+{% block extra_css %}
+<style>
+  .import-container { max-width: 900px; margin: 0 auto; padding: 20px; }
+  .import-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 24px; margin-bottom: 20px; }
+  .import-card h2 { margin-top: 0; font-size: 18px; font-weight: 600; color: #1f2937; }
+  .import-card p { color: #6b7280; font-size: 14px; line-height: 1.6; margin: 0 0 16px 0; }
+  
+  .form-group { margin-bottom: 16px; }
+  .form-group label { display: block; margin-bottom: 6px; font-weight: 600; color: #374151; font-size: 14px; }
+  .form-group select, .form-group input[type=file] { width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; }
+  .form-group input[type=file] { padding: 6px 8px; }
+  
+  .buttons { display: flex; gap: 12px; margin-top: 20px; }
+  .btn { padding: 10px 16px; border-radius: 6px; font-weight: 600; font-size: 14px; cursor: pointer; border: none; }
+  .btn-primary { background: #2563eb; color: #fff; }
+  .btn-primary:hover { background: #1d4ed8; }
+  .btn-secondary { background: #f3f4f6; color: #374151; border: 1px solid #d1d5db; }
+  .btn-secondary:hover { background: #e5e7eb; }
+  
+  .template-list { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+  .template-item { padding: 12px; border: 1px solid #e5e7eb; border-radius: 6px; background: #f9fafb; }
+  .template-item h4 { margin: 0 0 8px 0; font-size: 14px; font-weight: 600; color: #1f2937; }
+  .template-item p { margin: 0 0 10px 0; font-size: 13px; color: #6b7280; }
+  .template-item a { display: inline-block; padding: 6px 12px; background: #fff; border: 1px solid #d1d5db; border-radius: 4px; color: #2563eb; text-decoration: none; font-size: 13px; font-weight: 500; }
+  .template-item a:hover { background: #f3f4f6; }
+  
+  .info-box { padding: 12px; border-left: 4px solid #3b82f6; background: #eff6ff; color: #1e40af; font-size: 13px; border-radius: 4px; margin-bottom: 16px; }
+  .success-box { border-left-color: #10b981; background: #ecfdf5; color: #065f46; }
+  .error-box { border-left-color: #ef4444; background: #fef2f2; color: #991b1b; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="import-container">
+  <div class="import-card">
+    <h2>📥 Import Test Data for Scenario Testing</h2>
+    <p>Upload CSV files to populate designs, inventory, and orders for testing different scenarios. Choose the data type and download the template to see the required format.</p>
+    
+    <div class="info-box">
+      <strong>💡 Tip:</strong> Download a template first to see the required columns and format. Fill it in with your test data and upload.
+    </div>
+
+    <h3 style="margin-top: 24px; margin-bottom: 16px; font-size: 16px; font-weight: 600; color: #1f2937;">Step 1: Download a Template</h3>
+    <div class="template-list">
+      <div class="template-item">
+        <h4>🎨 Designs & Assets</h4>
+        <p>Create new designs with colour-specific assets and mockups.</p>
+        <a href="{% url 'download-csv-template' 'designs' %}">↓ Download Template</a>
+      </div>
+      <div class="template-item">
+        <h4>📦 Blank SKUs</h4>
+        <p>Define plain inventory fabric, colours, and sizes.</p>
+        <a href="{% url 'download-csv-template' 'blank_skus' %}">↓ Download Template</a>
+      </div>
+      <div class="template-item">
+        <h4>🖼️ Printed SKUs</h4>
+        <p>Link printed designs to designs, colours, sizes, and plain stock.</p>
+        <a href="{% url 'download-csv-template' 'printed_skus' %}">↓ Download Template</a>
+      </div>
+      <div class="template-item">
+        <h4>📋 Orders & Lines</h4>
+        <p>Create test orders with multiple line items at different statuses.</p>
+        <a href="{% url 'download-csv-template' 'orders' %}">↓ Download Template</a>
+      </div>
+    </div>
+
+    <h3 style="margin-top: 24px; margin-bottom: 16px; font-size: 16px; font-weight: 600; color: #1f2937;">Step 2: Upload Your CSV</h3>
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      
+      <div class="form-group">
+        <label for="import_type">Data Type to Import</label>
+        <select id="import_type" name="import_type" required>
+          <option value="">— Select —</option>
+          <option value="designs">Designs & Assets</option>
+          <option value="blank_skus">Blank SKUs</option>
+          <option value="printed_skus">Printed SKUs</option>
+          <option value="orders">Orders & Lines</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="csv_file">CSV File</label>
+        <input type="file" id="csv_file" name="csv_file" accept=".csv" required>
+      </div>
+
+      <div class="buttons">
+        <button type="submit" class="btn btn-primary">📤 Upload & Import</button>
+        <a href="{% url 'print-batch-suggest' %}" class="btn btn-secondary" style="text-decoration: none; text-align: center;">Cancel</a>
+      </div>
+    </form>
+  </div>
+
+  <div class="import-card">
+    <h2>📝 Format Requirements</h2>
+    <ul style="margin: 0; padding-left: 20px; color: #6b7280; font-size: 14px; line-height: 1.8;">
+      <li><strong>Size values:</strong> Use S, M, L, XL, XXL, XXXL. Avoid 2XL or 3XL (they're normalized automatically).</li>
+      <li><strong>Colours:</strong> Match existing designs when importing printed SKUs and orders.</li>
+      <li><strong>Numbers:</strong> Use integers for quantities and inventory counts.</li>
+      <li><strong>Optional fields:</strong> Leave blank if not needed (e.g., variant, tags, placement_note).</li>
+      <li><strong>First row:</strong> Must be a header row with column names.</li>
+      <li><strong>Encoding:</strong> CSV must be UTF-8 or UTF-8 with BOM.</li>
+    </ul>
+  </div>
+
+  <div class="import-card">
+    <h2>🧪 Quick Test Scenarios</h2>
+    <p>Common testing flows you can build:</p>
+    <ul style="margin: 0; padding-left: 20px; color: #6b7280; font-size: 14px; line-height: 1.8;">
+      <li><strong>Full workflow:</strong> Import designs → blank SKUs → printed SKUs → orders → test print batch and receive.</li>
+      <li><strong>Missing size testing:</strong> Create orders with blank size field to test missing-size warnings.</li>
+      <li><strong>Multi-variant:</strong> Import designs with variants (e.g., "Ugadi Telugu Raasi Phalalu" with "Karkataka", "Vruschika", "Thula").</li>
+      <li><strong>Inventory shortage:</strong> Import low blank SKU quantities and high order demand to test shortfall detection.</li>
+      <li><strong>Different statuses:</strong> Create orders at needs_printing, in_printing, ready_to_ship to test state transitions.</li>
+    </ul>
+  </div>
+</div>
+{% endblock %}

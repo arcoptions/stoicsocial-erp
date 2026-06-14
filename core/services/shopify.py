@@ -4,7 +4,11 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
+import re
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from django.conf import settings
 from django.db import transaction
@@ -74,9 +78,49 @@ def _to_int(value: Any, default: int = 0) -> int:
     return int(float(str(value).strip()))
 
 
+def _canonical_text(value: str | None) -> str:
+    """Normalize text for robust matching across punctuation/case differences."""
+    normalized = str(value or "").lower().replace("&", "and")
+    normalized = re.sub(r"[^a-z0-9]+", "", normalized)
+    return normalized
+
+
+def _extract_variant_and_size(raw_variant: str | None, raw_size: str | None) -> tuple[str | None, str | None]:
+    """Derive variant/size when Shopify sends size in variant text like 'Karkataka / M'."""
+    size = (raw_size or "").strip() or None
+    variant = (raw_variant or "").strip() or None
+    if size:
+        return variant, size
+    if not variant:
+        return None, None
+
+    parts = [part.strip() for part in variant.split("/") if part.strip()]
+    if len(parts) >= 2:
+        maybe_size = parts[-1].upper()
+        if maybe_size in {"S", "M", "L", "XL", "2XL", "3XL", "XXL"}:
+            derived_variant = " / ".join(parts[:-1]).strip() or None
+            return derived_variant, maybe_size
+    return variant, size
+
+
+def _canonical_size_label(raw_size: str | None) -> str:
+    """Normalize incoming size strings to canonical labels used by inventory."""
+    value = (raw_size or "").strip().upper()
+    if value == "2XL":
+        return "XXL"
+    if value == "3XL":
+        return "XXXL"
+    return value
+
+
+def _has_valid_size(raw_size: str | None) -> bool:
+    """Return True when a Shopify line contains an explicit supported size."""
+    return _canonical_size_label(raw_size) in {"XS", "S", "M", "L", "XL", "XXL", "XXXL", "4XL"}
+
+
 def _resolve_printed_sku(item: dict[str, Any]) -> PrintedSKU | None:
     """Attempt to resolve a Shopify line item to a printed SKU."""
-    query = PrintedSKU.objects.select_related("design")
+    query = PrintedSKU.objects.select_related("design").filter(is_active=True)
 
     sku_id = item.get("sku")
     if sku_id:
@@ -85,9 +129,19 @@ def _resolve_printed_sku(item: dict[str, Any]) -> PrintedSKU | None:
             return match
 
     design_name = str(item.get("product_title") or item.get("title") or item.get("name") or "").strip()
-    variant = str(item.get("variant_title") or item.get("option1") or "").strip() or None
+    raw_variant = str(item.get("variant_title") or item.get("option1") or "").strip() or None
     colour = str(item.get("option2") or item.get("color") or item.get("colour") or "").strip()
-    size = str(item.get("option3") or item.get("size") or "").strip() or None
+    raw_size = str(item.get("option3") or item.get("size") or "").strip() or None
+    variant, size = _extract_variant_and_size(raw_variant, raw_size)
+    if not _has_valid_size(size):
+        return None
+
+    canonical_size = _canonical_size_label(size)
+
+    scoped_query = query
+    if colour:
+        scoped_query = scoped_query.filter(colour__iexact=colour)
+    scoped_query = scoped_query.filter(size__iexact=canonical_size)
 
     filters: dict[str, Any] = {"design__name__iexact": design_name}
     if variant:
@@ -96,10 +150,27 @@ def _resolve_printed_sku(item: dict[str, Any]) -> PrintedSKU | None:
         filters["variant__isnull"] = True
     if colour:
         filters["colour__iexact"] = colour
-    if size:
-        filters["size__iexact"] = size
+    filters["size__iexact"] = canonical_size
 
-    return query.filter(**filters).first()
+    exact_match = scoped_query.filter(**filters).first()
+    if exact_match:
+        return exact_match
+
+    # Fallback for punctuation/spacing differences in product titles.
+    canonical_design = _canonical_text(design_name)
+    if not canonical_design:
+        return None
+
+    canonical_variant = _canonical_text(variant)
+    fallback_candidates = list(scoped_query)
+    for candidate in fallback_candidates:
+        if _canonical_text(candidate.design.name) != canonical_design:
+            continue
+        if canonical_variant and _canonical_text(candidate.variant) not in {"", canonical_variant}:
+            continue
+        return candidate
+
+    return None
 
 
 def _line_status_for_item(printed_sku: PrintedSKU | None, quantity: int) -> str:
@@ -137,20 +208,40 @@ def _upsert_line(order: Order, item: dict[str, Any]) -> OrderLine | None:
         return None
 
     quantity = _to_int(item.get("quantity"), default=0)
+    raw_variant = str(item.get("variant_title") or item.get("option1") or "").strip() or None
+    raw_size = str(item.get("option3") or item.get("size") or "").strip() or None
+    parsed_variant, parsed_size = _extract_variant_and_size(raw_variant, raw_size)
+    canonical_size = _canonical_size_label(parsed_size)
+    has_valid_size = _has_valid_size(parsed_size)
     printed_sku = _resolve_printed_sku(item)
+
+    if not has_valid_size:
+        logger.warning(
+            "Shopify line missing/invalid size. order=%s line=%s title=%s variant=%s raw_size=%s",
+            order.shopify_order_id,
+            shopify_line_id,
+            str(item.get("title") or item.get("name") or "Untitled").strip(),
+            parsed_variant or "",
+            raw_size or "",
+        )
+
     line, _ = OrderLine.objects.update_or_create(
         shopify_line_id=shopify_line_id,
         defaults={
             "order": order,
             "product_name": str(item.get("title") or item.get("name") or "Untitled").strip(),
-            "variant": str(item.get("variant_title") or item.get("option1") or "").strip(),
-            "size": str(item.get("size") or item.get("option3") or "").strip(),
+            "variant": parsed_variant or "",
+            "size": canonical_size if has_valid_size else "",
             "quantity": quantity,
-            "printed_sku": printed_sku,
+            "printed_sku": printed_sku if has_valid_size else None,
             "is_bundle": False,
             "bundle_components": [],
         },
     )
+
+    if not has_valid_size and line.status != OrderLine.STATUS_TO_BE_PRINTED:
+        line.status = OrderLine.STATUS_TO_BE_PRINTED
+        line.save(update_fields=["status", "updated_at"])
     return line
 
 
@@ -177,6 +268,15 @@ def _set_live_line_status(order_line: OrderLine) -> OrderLine:
     return _set_line_to_be_printed(order_line)
 
 
+def _set_line_status_without_inventory(order_line: OrderLine) -> OrderLine:
+    """Set line status based on stock availability without mutating inventory counters."""
+    target_status = _line_status_for_item(order_line.printed_sku, order_line.quantity)
+    if order_line.status != target_status:
+        order_line.status = target_status
+        order_line.save(update_fields=["status", "updated_at"])
+    return order_line
+
+
 def _mark_line_shipped(order_line: OrderLine, *, commit_reserved: bool) -> OrderLine:
     """Mark a line shipped, committing stock only when a live reservation actually exists."""
     if order_line.status == OrderLine.STATUS_SHIPPED:
@@ -197,6 +297,14 @@ def _cancel_line(order_line: OrderLine) -> OrderLine:
     """Cancel a line and release any ready-to-ship reservation first."""
     if order_line.status == OrderLine.STATUS_READY_SHIP:
         order_line = inventory.release_printed(order_line)
+    if order_line.status != OrderLine.STATUS_CANCELLED:
+        order_line.status = OrderLine.STATUS_CANCELLED
+        order_line.save(update_fields=["status", "updated_at"])
+    return order_line
+
+
+def _cancel_line_without_inventory(order_line: OrderLine) -> OrderLine:
+    """Cancel a line without releasing reservations (used for backfill-only sync paths)."""
     if order_line.status != OrderLine.STATUS_CANCELLED:
         order_line.status = OrderLine.STATUS_CANCELLED
         order_line.save(update_fields=["status", "updated_at"])
@@ -252,12 +360,13 @@ def _reconcile_new_orders() -> int:
 
 
 @transaction.atomic
-def ingest_order(payload: dict[str, Any]) -> Order:
-    """Upsert an order and its lines from a Shopify order webhook payload."""
+def ingest_order(payload: dict[str, Any], *, apply_inventory_side_effects: bool = True) -> Order:
+    """Upsert an order and its lines from Shopify payload, optionally mutating inventory state."""
     shopify_order_id = str(payload.get("id") or "").strip()
     if not shopify_order_id:
         raise ValueError("Shopify order id is required for order ingestion.")
-    existing_order = Order.objects.select_for_update().filter(shopify_order_id=shopify_order_id).first()
+    order_query = Order.objects.select_for_update() if apply_inventory_side_effects else Order.objects
+    existing_order = order_query.filter(shopify_order_id=shopify_order_id).first()
     incoming_fulfillment_status = _normalize_fulfillment_status(payload.get("fulfillment_status"))
     fulfillment_status = incoming_fulfillment_status or _normalize_fulfillment_status(
         existing_order.shopify_fulfillment_status if existing_order is not None else ""
@@ -265,7 +374,7 @@ def ingest_order(payload: dict[str, Any]) -> Order:
     delivery_status = _extract_delivery_status(payload) or (
         existing_order.shopify_delivery_status if existing_order is not None else ""
     )
-    order, _ = Order.objects.select_for_update().update_or_create(
+    order, _ = order_query.update_or_create(
         shopify_order_id=shopify_order_id,
         defaults={
             "order_no": str(payload.get("name") or payload.get("order_number") or "").strip(),
@@ -289,17 +398,35 @@ def ingest_order(payload: dict[str, Any]) -> Order:
         if fulfillment_status == "fulfilled":
             _mark_line_shipped(line, commit_reserved=False)
         else:
-            _set_live_line_status(line)
+            if apply_inventory_side_effects:
+                _set_live_line_status(line)
+            else:
+                _set_line_status_without_inventory(line)
 
     if seen_line_ids:
         for stale_line in order.lines.exclude(shopify_line_id__in=seen_line_ids):
-            _cancel_line(stale_line)
+            if apply_inventory_side_effects:
+                _cancel_line(stale_line)
+            else:
+                _cancel_line_without_inventory(stale_line)
 
     if fulfillment_status == "fulfilled":
         order.status = Order.STATUS_SHIPPED
         order.save(update_fields=["status", "updated_at"])
     else:
-        _apply_live_state_to_order(order)
+        if apply_inventory_side_effects:
+            _apply_live_state_to_order(order)
+        else:
+            for line in order.lines.exclude(status__in=[OrderLine.STATUS_CANCELLED, OrderLine.STATUS_SHIPPED]):
+                _set_line_status_without_inventory(line)
+            recomputed = _recompute_order(order)
+            if recomputed == Order.STATUS_NEW:
+                order.status = Order.STATUS_ISSUE
+                order.save(update_fields=["status", "updated_at"])
+
+        if order.lines.filter(size="").exclude(status__in=[OrderLine.STATUS_CANCELLED, OrderLine.STATUS_SHIPPED]).exists():
+            order.status = Order.STATUS_ISSUE
+            order.save(update_fields=["status", "updated_at"])
     return order
 
 
@@ -384,7 +511,6 @@ def ingest_shopify_webhook(topic: str, idempotency_key: str, payload: dict[str, 
 @csrf_exempt
 def shopify_webhook(request: HttpRequest) -> HttpResponse:
     """Accept Shopify webhooks and process synchronously (Django-Q2 worker optional)."""
-    from core.tasks import process_shopify_webhook
 
     if request.method != "POST":
         return HttpResponse(status=405)
@@ -395,19 +521,30 @@ def shopify_webhook(request: HttpRequest) -> HttpResponse:
     body = request.body
 
     if not verify_hmac(body, hmac_header):
+        logger.warning("Shopify webhook HMAC verification failed for topic=%s webhook_id=%s", topic, webhook_id)
         return JsonResponse({"detail": "Invalid signature"}, status=401)
 
-    payload = json.loads(body.decode("utf-8") or "{}")
+    try:
+        payload = json.loads(body.decode("utf-8") or "{}")
+    except json.JSONDecodeError as exc:
+        logger.error("Shopify webhook JSON decode error: %s", exc)
+        return JsonResponse({"detail": "Invalid JSON body"}, status=400)
+
     if topic in {"orders/create", "orders/updated", "orders/cancelled", "orders/fulfilled"}:
         if not _extract_order_identifier_for_topic(topic, payload):
             return JsonResponse({"detail": "Missing Shopify order id"}, status=400)
-    
-    # Process webhook synchronously to ensure orders are persisted immediately.
-    # Note: For high-volume scenarios, deploy a Django-Q worker and switch to async_task.
+
+    if not webhook_id:
+        webhook_id = f"{topic}:{json.dumps(payload.get('id', ''), sort_keys=True)}"
+
+    logger.info("Received Shopify webhook topic=%s webhook_id=%s", topic, webhook_id)
+
     try:
+        from core.tasks import process_shopify_webhook
         event_id = process_shopify_webhook(topic, webhook_id, payload)
         return JsonResponse({"processed": True, "event_id": event_id}, status=200)
     except Exception as exc:
+        logger.error("Shopify webhook processing error topic=%s: %s", topic, exc, exc_info=True)
         return JsonResponse({"detail": str(exc)}, status=500)
 
 

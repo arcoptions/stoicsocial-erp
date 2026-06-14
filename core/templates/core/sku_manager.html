@@ -1,0 +1,454 @@
+{% extends "base.html" %}
+{% block title %}Adjust Stock | Bold &amp; Italic Ops{% endblock %}
+
+{% block extra_css %}
+<style>
+  .stock-mode {
+    display: inline-flex;
+    background: #f3f4f6;
+    border: 1px solid #d1d5db;
+    border-radius: 10px;
+    padding: 4px;
+    gap: 4px;
+  }
+  .stock-mode a {
+    text-decoration: none;
+    color: #111827;
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 13px;
+  }
+  .stock-mode a.active {
+    background: #111827;
+    color: #fff;
+  }
+  .compact-input {
+    width: 72px;
+    text-align: center;
+  }
+  .size-grid {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(56px, 1fr));
+    gap: 6px;
+    min-width: 420px;
+  }
+  .size-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+  .size-label {
+    font-size: 10px;
+    line-height: 1;
+    color: #6b7280;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .size-grid input {
+    width: 100%;
+    text-align: center;
+  }
+  .section-title {
+    margin: 0 0 12px;
+    font-size: 18px;
+  }
+  .autosave-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: #374151;
+  }
+  .autosave-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #10b981;
+  }
+  .autosave-dot.saving {
+    background: #f59e0b;
+  }
+  .autosave-dot.error {
+    background: #ef4444;
+  }
+  .printed-stock-table {
+    min-width: 1280px;
+  }
+  .actions-col {
+    min-width: 120px;
+    text-align: center;
+  }
+  .delete-btn {
+    min-width: 78px;
+    display: inline-block;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<h2 style="font-size:28px;margin:0 0 18px;">Adjust Stock</h2>
+
+<div class="card" style="padding:18px 22px;margin-bottom:18px;">
+  <form method="get" style="display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap;justify-content:space-between;">
+    <div class="stock-mode">
+      <a href="?stock_type=printed&q={{ filters.q|urlencode }}&colour={{ filters.colour|urlencode }}&fabric={{ filters.fabric|urlencode }}" class="{% if filters.stock_type == 'printed' %}active{% endif %}">Printed Stock</a>
+      <a href="?stock_type=plain&q={{ filters.q|urlencode }}&colour={{ filters.colour|urlencode }}&fabric={{ filters.fabric|urlencode }}" class="{% if filters.stock_type == 'plain' %}active{% endif %}">Plain Stock</a>
+    </div>
+    <input type="hidden" name="stock_type" value="{{ filters.stock_type }}" />
+    <div>
+      <label style="display:block;font-size:12px;margin-bottom:4px;">Search</label>
+      <input type="search" name="q" value="{{ filters.q }}" placeholder="Design, colour, size, fabric" style="min-width:240px;" />
+    </div>
+    <div {% if filters.stock_type != 'printed' %}style="display:none;"{% endif %}>
+      <label style="display:block;font-size:12px;margin-bottom:4px;">Printed Colour</label>
+      <select name="colour">
+        <option value="">All</option>
+        {% for c in colours %}
+        <option value="{{ c }}" {% if filters.colour == c %}selected{% endif %}>{{ c }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div {% if filters.stock_type != 'plain' %}style="display:none;"{% endif %}>
+      <label style="display:block;font-size:12px;margin-bottom:4px;">Plain Fabric</label>
+      <select name="fabric">
+        <option value="">All</option>
+        {% for f in fabrics %}
+        <option value="{{ f }}" {% if filters.fabric == f %}selected{% endif %}>{{ f }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit">Apply Filters</button>
+    <a href="{% url 'sku-manager' %}?stock_type={{ filters.stock_type }}" style="text-decoration:none;padding:9px 12px;border:1px solid #ddd;border-radius:6px;background:#fafafa;color:#333;">Clear</a>
+  </form>
+</div>
+
+{% if filters.stock_type == 'printed' %}
+<div class="card" style="padding:18px 22px;margin-bottom:18px;">
+  <h3 class="section-title">Printed Stock Import</h3>
+  <form method="post" enctype="multipart/form-data" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="import_printed" />
+    <div>
+      <label style="display:block;font-size:12px;margin-bottom:4px;">Excel File</label>
+      <input type="file" name="excel_file" accept=".xlsx,.xls" required />
+    </div>
+    <button type="submit">Import Printed Stock</button>
+    <a href="{% url 'printed-sku-template' %}" style="text-decoration:none;padding:9px 12px;border:1px solid #ddd;border-radius:6px;background:#fafafa;color:#333;">Download Sample Excel</a>
+  </form>
+</div>
+
+<div class="card" style="padding:18px 22px;margin-bottom:18px;">
+  <h3 class="section-title">Add Printed Stock Row</h3>
+  <form method="post" style="display:grid;grid-template-columns:repeat(5,minmax(120px,1fr));gap:10px;align-items:end;">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="create_printed" />
+    <div><label>Design</label><input name="design_name" required /></div>
+    <div><label>Variant</label><input name="variant" /></div>
+    <div><label>Colour</label><input name="colour" required /></div>
+    <div><label>Size</label><input name="size" /></div>
+    <div><label>On Hand</label><input type="number" name="on_hand" value="0" required /></div>
+    <div><label>Reserved</label><input type="number" name="reserved" value="0" required /></div>
+    <div><label>Buffer Min</label><input type="number" name="buffer_min" value="0" required /></div>
+    <div><label>Buffer Target</label><input type="number" name="buffer_target" value="0" required /></div>
+    <div><label>Buffer Max</label><input type="number" name="buffer_max" value="0" required /></div>
+    <div><button type="submit">Create</button></div>
+  </form>
+</div>
+
+<div class="card" style="padding:0;overflow-x:auto;margin-bottom:18px;">
+  <div style="padding:14px 18px;border-bottom:1px solid #ececec;display:flex;justify-content:space-between;align-items:center;">
+    <strong>Printed Stock (Current On-Hand by Size)</strong>
+    <span class="autosave-indicator"><span id="autosave-dot-printed" class="autosave-dot"></span><span id="autosave-text-printed">Auto Save: Ready</span></span>
+  </div>
+  <table class="printed-stock-table">
+    <thead>
+      <tr>
+        <th>Design</th>
+        <th>Variant</th>
+        <th>Colour</th>
+        <th>Sizes (S / M / L / XL / 2XL / 3XL)</th>
+        <th>Total H</th>
+        <th>Link Plain SKU</th>
+        <th class="actions-col">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in printed_groups %}
+      <tr>
+        <td>
+          <input form="group-{{ forloop.counter }}" name="design_name" value="{{ row.design_name }}" required />
+        </td>
+        <td>
+          <input form="group-{{ forloop.counter }}" name="variant" value="{{ row.variant }}" />
+        </td>
+        <td>
+          <input form="group-{{ forloop.counter }}" name="colour" value="{{ row.colour }}" required />
+        </td>
+        <td>
+          <div class="size-grid">
+            {% for cell in row.size_cells %}
+            <div class="size-cell">
+              <span class="size-label">{{ cell.size }}</span>
+              <input form="group-{{ forloop.parentloop.counter }}" class="printed-on-hand" type="number" name="on_hand_{{ cell.size }}" value="{{ cell.on_hand }}" title="{{ cell.size }} On Hand" />
+            </div>
+            {% endfor %}
+          </div>
+        </td>
+        <td>{{ row.total_on_hand }}</td>
+        <td style="min-width:180px;">
+          <select class="link-blank-sku-select" style="font-size:12px;width:100%;padding:4px 6px;border:1px solid #ccc;border-radius:4px;"
+            data-design-name="{{ row.design_name }}"
+            data-colour="{{ row.colour }}">
+            <option value="">— unlinked —</option>
+            {% for b in all_blank_skus %}
+            <option value="{{ b.fabric }}|||{{ b.colour }}" {% if row.linked_plain_option == b.fabric|add:"|||"|add:b.colour %}selected{% endif %}>{{ b.fabric }} / {{ b.colour }}</option>
+            {% endfor %}
+          </select>
+          <div style="font-size:10px;color:#666;margin-top:2px;">
+            <small>Applied to all sizes (S–3XL) of this design+colour</small>
+          </div>
+        </td>
+        <td class="actions-col" style="white-space:nowrap;">
+          <form id="group-{{ forloop.counter }}" method="post" style="display:none;">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="update_printed_group" />
+          </form>
+          <form method="post" style="display:inline;" onsubmit="return confirm('Delete all sizes for this design/variant/colour?');">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="delete_printed_group" />
+            <input type="hidden" name="design_name" value="{{ row.design_name }}" />
+            <input type="hidden" name="variant" value="{{ row.variant }}" />
+            <input type="hidden" name="colour" value="{{ row.colour }}" />
+            <button type="submit" class="delete-btn" style="background:#b91c1c;color:#fff;border:none;padding:7px 10px;border-radius:4px;">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="8" style="text-align:center;padding:24px;color:#666;">No printed stock rows match current filters.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% if filters.stock_type == 'plain' %}
+<div class="card" style="padding:0;overflow-x:auto;">
+  <div style="padding:14px 18px;border-bottom:1px solid #ececec;display:flex;justify-content:space-between;align-items:center;">
+    <strong>Plain Stock (Consolidated by Fabric / Colour)</strong>
+    <span class="autosave-indicator"><span id="autosave-dot-plain" class="autosave-dot"></span><span id="autosave-text-plain">Auto Save: Ready</span></span>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Fabric</th>
+        <th>Colour</th>
+        <th>Sizes (S / M / L / XL / 2XL / 3XL)</th>
+        <th>Total H</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in plain_groups %}
+      <tr>
+        <td>{{ row.fabric }}</td>
+        <td>{{ row.colour }}</td>
+        <td>
+          <div class="size-grid">
+            {% for cell in row.size_cells %}
+            <div class="size-cell">
+              <span class="size-label">{{ cell.size }}</span>
+              <input
+                form="plain-group-{{ forloop.parentloop.counter }}"
+                class="plain-on-hand"
+                type="number"
+                name="on_hand_{{ cell.sku_id }}"
+                value="{{ cell.on_hand }}"
+                title="{{ cell.size }} On Hand"
+                {% if not cell.sku_id %}disabled{% endif %}
+              />
+            </div>
+            {% endfor %}
+          </div>
+        </td>
+        <td>{{ row.total_on_hand }}</td>
+        <td><span class="muted">Auto</span>
+          <form id="plain-group-{{ forloop.counter }}" method="post" style="display:none;">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="update_plain_group" />
+            {% for cell in row.size_cells %}
+              {% if cell.sku_id %}<input type="hidden" name="sku_ids" value="{{ cell.sku_id }}" />{% endif %}
+            {% endfor %}
+          </form>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5" style="text-align:center;padding:24px;color:#666;">No plain stock rows match current filters.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<script>
+function getCookie(name) {
+  let cookieValue = null;
+  if (document.cookie && document.cookie !== '') {
+    const cookies = document.cookie.split(';');
+    for (let i = 0; i < cookies.length; i += 1) {
+      const cookie = cookies[i].trim();
+      if (cookie.substring(0, name.length + 1) === (name + '=')) {
+        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+        break;
+      }
+    }
+  }
+  return cookieValue;
+}
+
+function setAutoSaveState(type, state, text) {
+  const dot = document.getElementById(`autosave-dot-${type}`);
+  const label = document.getElementById(`autosave-text-${type}`);
+  if (!dot || !label) return;
+  dot.classList.remove('saving', 'error');
+  if (state === 'saving') dot.classList.add('saving');
+  if (state === 'error') dot.classList.add('error');
+  label.textContent = text;
+}
+
+async function postFormAuto(form, type) {
+  const formData = new FormData(form);
+  setAutoSaveState(type, 'saving', 'Auto Save: Saving...');
+  try {
+    const response = await fetch(window.location.pathname + window.location.search, {
+      method: 'POST',
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest',
+        'X-CSRFToken': getCookie('csrftoken'),
+      },
+      body: formData,
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) {
+      setAutoSaveState(type, 'error', `Auto Save: Failed (${data.detail || 'error'})`);
+      return;
+    }
+    setAutoSaveState(type, 'ok', 'Auto Save: Saved');
+  } catch (error) {
+    setAutoSaveState(type, 'error', 'Auto Save: Failed (network)');
+  }
+}
+
+function debounce(fn, wait) {
+  let timeout;
+  return function debounced(...args) {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => fn.apply(this, args), wait);
+  };
+}
+
+const savePrintedDebounced = debounce((form) => postFormAuto(form, 'printed'), 450);
+const savePlainDebounced = debounce((form) => postFormAuto(form, 'plain'), 450);
+
+document.querySelectorAll('.printed-on-hand').forEach((input) => {
+  input.addEventListener('input', () => {
+    const formId = input.getAttribute('form');
+    const form = formId ? document.getElementById(formId) : null;
+    if (form) savePrintedDebounced(form);
+  });
+});
+
+// Link Plain SKU – AJAX on select change (design+colour level)
+document.querySelectorAll('.link-blank-sku-select').forEach((sel) => {
+  sel.addEventListener('change', () => {
+    const designName = sel.dataset.designName;
+    const colour = sel.dataset.colour;
+    const plainOption = sel.value;
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+    const body = new URLSearchParams({
+      action: 'link_blank_sku',
+      design_name: designName,
+      colour: colour,
+      plain_option: plainOption,
+      csrfmiddlewaretoken: csrfToken,
+    });
+    fetch(window.location.pathname, {
+      method: 'POST',
+      headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+    })
+    .then((r) => r.json())
+    .then((data) => {
+      if (!data.ok) { alert('Link failed: ' + (data.detail || 'Unknown error')); }
+    })
+    .catch(() => alert('Network error saving plain SKU link.'));
+  });
+});
+
+document.querySelectorAll('.plain-on-hand').forEach((input) => {
+  input.addEventListener('input', () => {
+    if (input.disabled) return;
+    const formId = input.getAttribute('form');
+    const form = formId ? document.getElementById(formId) : null;
+    if (!form) return;
+
+    const skuId = String(input.name || '').replace('on_hand_', '').trim();
+    if (!skuId) return;
+
+    // Keep only the changed SKU payload in the hidden autosave form.
+    form.querySelectorAll('input[name="on_hand"]').forEach((el) => el.remove());
+    form.querySelectorAll('input[name="blank_sku_id"]').forEach((el) => el.remove());
+
+    const hiddenSku = document.createElement('input');
+    hiddenSku.type = 'hidden';
+    hiddenSku.name = 'blank_sku_id';
+    hiddenSku.value = skuId;
+    form.appendChild(hiddenSku);
+
+    const hiddenOnHand = document.createElement('input');
+    hiddenOnHand.type = 'hidden';
+    hiddenOnHand.name = 'on_hand';
+    hiddenOnHand.value = input.value;
+    form.appendChild(hiddenOnHand);
+
+    savePlainDebounced(form);
+  });
+});
+</script>
+
+{% if is_admin %}
+<div class="card" style="padding:0;overflow-x:auto;margin-top:18px;">
+  <div style="padding:14px 18px;border-bottom:1px solid #ececec;"><strong>Deleted Items (Admin Restore)</strong></div>
+  <table>
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Label</th>
+        <th>Deleted At</th>
+        <th>Deleted By</th>
+        <th>Restore</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in deleted_items %}
+      <tr>
+        <td>{{ item.get_record_type_display }}</td>
+        <td>{{ item.label }}</td>
+        <td>{{ item.created_at|date:"d M Y H:i" }}</td>
+        <td>{{ item.deleted_by|default:'—' }}</td>
+        <td>
+          <form method="post" action="{% url 'restore-deleted-item' item.id %}" onsubmit="return confirm('Restore this deleted item?');">
+            {% csrf_token %}
+            <button type="submit">Restore</button>
+          </form>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5" style="text-align:center;padding:24px;color:#666;">No deleted items waiting for restore.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

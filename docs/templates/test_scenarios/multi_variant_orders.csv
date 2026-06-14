@@ -1,0 +1,4 @@
+shopify_order_id,order_no,customer_name,email,shopify_line_id,product_name,variant,colour,size,quantity,status,line_status,fulfillment_status,delivery_status,tags
+MV-001,#MV001,Ravi Kumar,ravi@example.com,MV-001-L1,Raasi Phalalu,,Black,M,3,needs_printing,to_be_printed,unfulfilled,pending,test,multi-variant
+MV-002,#MV002,Priya Singh,priya@example.com,MV-002-L1,Raasi Phalalu,,White,S,2,needs_printing,to_be_printed,unfulfilled,pending,test,multi-variant
+MV-003,#MV003,Arjun Nair,arjun@example.com,MV-003-L1,Raasi Phalalu,,Navy,L,1,needs_printing,to_be_printed,unfulfilled,pending,test,multi-variant

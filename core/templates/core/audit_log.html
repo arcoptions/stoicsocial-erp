@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Audit Log | BoldERP{% endblock %}
+
+{% block content %}
+<div class="card">
+  <h2>Stock Movement Audit Log</h2>
+  <form method="get" style="display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;align-items:flex-end;">
+    <div>
+      <label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Pool</label>
+      <select name="pool">
+        <option value="">All pools</option>
+        {% for val, label in pools %}
+          <option value="{{ val }}" {% if filters.pool == val %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">Reason</label>
+      <select name="reason">
+        <option value="">All reasons</option>
+        {% for val, label in reasons %}
+          <option value="{{ val }}" {% if filters.reason == val %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit">Filter</button>
+    {% if filters.pool or filters.reason %}
+      <a href="{% url 'audit-log' %}" style="padding:9px 16px;background:#f5ece0;border:1px solid #e2d3be;border-radius:6px;color:#6b5a45;font-weight:600;font-size:13px;">Clear</a>
+    {% endif %}
+  </form>
+</div>
+
+<div class="card" style="padding:0;overflow-x:auto;">
+  <table>
+    <thead>
+      <tr>
+        <th>Date/Time</th>
+        <th>Pool</th>
+        <th>SKU</th>
+        <th style="text-align:center;">Δ On Hand</th>
+        <th style="text-align:center;">Δ Reserved</th>
+        <th>Reason</th>
+        <th>Note</th>
+        <th>Actor</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for movement in page_obj %}
+      <tr>
+        <td style="white-space:nowrap;font-size:13px;">{{ movement.created_at|date:"d M Y, H:i" }}</td>
+        <td>
+          <span style="background:{% if movement.pool == 'plain' %}#f0fdf4{% else %}#eff6ff{% endif %};
+            color:{% if movement.pool == 'plain' %}#15803d{% else %}#1d4ed8{% endif %};
+            padding:2px 8px;border-radius:99px;font-size:12px;">{{ movement.pool|title }}</span>
+        </td>
+        <td style="font-size:13px;">
+          {% if movement.blank_sku %}{{ movement.blank_sku }}{% endif %}
+          {% if movement.printed_sku %}{{ movement.printed_sku }}{% endif %}
+        </td>
+        <td style="text-align:center;font-weight:600;color:{% if movement.delta_on_hand >= 0 %}#15803d{% else %}#dc2626{% endif %};">
+          {% if movement.delta_on_hand >= 0 %}+{% endif %}{{ movement.delta_on_hand }}
+        </td>
+        <td style="text-align:center;font-weight:600;color:{% if movement.delta_reserved >= 0 %}#92400e{% else %}#1d4ed8{% endif %};">
+          {% if movement.delta_reserved >= 0 %}+{% endif %}{{ movement.delta_reserved }}
+        </td>
+        <td style="font-size:13px;">{{ movement.get_reason_display }}</td>
+        <td style="font-size:13px;max-width:240px;word-break:break-word;">{{ movement.note|default:"—" }}</td>
+        <td style="font-size:13px;">{{ movement.actor.username|default:"system" }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="8" style="text-align:center;color:#6b7280;padding:24px;">No movements found.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if page_obj.has_other_pages %}
+<div style="display:flex;gap:8px;justify-content:center;margin-top:16px;">
+  {% if page_obj.has_previous %}
+    <a href="?page={{ page_obj.previous_page_number }}&pool={{ filters.pool }}&reason={{ filters.reason }}"
+      style="padding:8px 16px;border:1px solid #e6e6e6;border-radius:6px;background:#fff;">← Prev</a>
+  {% endif %}
+  <span style="padding:8px 16px;color:#6b7280;">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+  {% if page_obj.has_next %}
+    <a href="?page={{ page_obj.next_page_number }}&pool={{ filters.pool }}&reason={{ filters.reason }}"
+      style="padding:8px 16px;border:1px solid #e6e6e6;border-radius:6px;background:#fff;">Next →</a>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

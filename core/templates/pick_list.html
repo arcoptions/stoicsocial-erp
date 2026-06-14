@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pick List — Job {{ print_job.id|stringformat:"s"|slice:":8" }} | BoldERP</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Segoe UI", Arial, sans-serif;
+      margin: 0;
+      padding: 24px;
+      color: #212529;
+      background: #fff;
+    }
+    h1 { font-size: 22px; margin: 0 0 4px; }
+    .meta { color: #6b7280; font-size: 14px; margin-bottom: 24px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+    th, td { border: 1px solid #e6e6e6; padding: 10px 14px; text-align: left; }
+    th { background: #f5f5f5; font-weight: 700; }
+    .total-row td { font-weight: 700; background: #f5f5f5; }
+    .check-col { width: 48px; text-align: center; font-size: 20px; }
+    @media print {
+      body { padding: 0; }
+      .no-print { display: none; }
+      @page { margin: 16mm; }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print" style="margin-bottom:16px;">
+    <button onclick="window.print()" style="padding:10px 20px;background:#1f2933;color:#fff;border:0;border-radius:8px;cursor:pointer;">
+      🖨 Print Pick List
+    </button>
+    &nbsp;
+    <a href="{% url 'receive-dashboard' %}" style="color:#464feb;">← Receive Dashboard</a>
+  </div>
+
+  <h1>Pick List</h1>
+  <div class="meta">
+    Job: {{ print_job.id }} &nbsp;|&nbsp;
+    Vendor: {{ print_job.vendor.name }} &nbsp;|&nbsp;
+    Date: {{ print_job.sent_at|date:"d M Y"|default:"—" }} &nbsp;|&nbsp;
+    Total units: <strong>{{ total }}</strong>
+  </div>
+
+  <p style="font-size:14px;font-weight:600;">Pull the following blank garments from the shelf and count before sending to printer:</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th class="check-col">✓</th>
+        <th>Fabric</th>
+        <th>Colour</th>
+        <th>Size</th>
+        <th>Qty to Pull</th>
+        <th>For Design / Variant</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td class="check-col">☐</td>
+        <td>{% if row.blank_sku %}{{ row.blank_sku.fabric }}{% else %}—{% endif %}</td>
+        <td>{% if row.blank_sku %}{{ row.blank_sku.colour }}{% else %}—{% endif %}</td>
+        <td>{% if row.blank_sku %}{{ row.blank_sku.size }}{% else %}—{% endif %}</td>
+        <td style="font-size:20px;font-weight:700;text-align:center;">{{ row.qty_sent }}</td>
+        <td>
+          {{ row.printed_sku.design.name }}<br>
+          <span style="font-size:12px;color:#6b7280;">
+            {{ row.printed_sku.variant|default:"BASE" }} / {{ row.printed_sku.colour }} / {{ row.printed_sku.size|default:"NA" }}
+          </span>
+        </td>
+        <td></td>
+      </tr>
+      {% endfor %}
+      <tr class="total-row">
+        <td colspan="4" style="text-align:right;">TOTAL UNITS</td>
+        <td style="font-size:20px;text-align:center;">{{ total }}</td>
+        <td colspan="2"></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div style="margin-top:40px;font-size:13px;color:#6b7280;">
+    <p><strong>Picked by:</strong> _______________________________  &nbsp; <strong>Date:</strong> _____________</p>
+    <p><strong>Counted by:</strong> _____________________________  &nbsp; <strong>Date:</strong> _____________</p>
+  </div>
+</body>
+</html>

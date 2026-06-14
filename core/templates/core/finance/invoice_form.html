@@ -1,0 +1,557 @@
+{% extends "base.html" %}
+
+{% block title %}Create Invoice - BoldERP{% endblock %}
+
+{% block content %}
+<div class="invoice-form-page">
+    <div class="form-container">
+        <h1>🧾 Create Invoice</h1>
+
+        {% if errors %}
+        <div class="alert alert-error">
+            <p><strong>Please fix the following errors:</strong></p>
+            <ul>
+                {% for error in errors %}
+                <li>{{ error }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        <form method="post" class="invoice-form">
+            {% csrf_token %}
+            <input type="hidden" id="line_items_json" name="line_items_json">
+
+            <!-- Invoice Header -->
+            <fieldset>
+                <legend>Invoice Details</legend>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="invoice_type">Invoice Type <span class="required">*</span></label>
+                        <select id="invoice_type" name="invoice_type" required>
+                            <option value="">Select Type</option>
+                            {% for value, label in invoice_types %}
+                            <option value="{{ value }}" {% if form_data.invoice_type == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="invoice_number">Invoice Number <span class="required">*</span></label>
+                        <input type="text" id="invoice_number" name="invoice_number" value="{{ form_data.invoice_number }}" placeholder="INV-26-27-001" required>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="invoice_date">Invoice Date <span class="required">*</span></label>
+                        <input type="date" id="invoice_date" name="invoice_date" value="{{ form_data.invoice_date }}" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="order_date">Order Date <span class="required">*</span></label>
+                        <input type="date" id="order_date" name="order_date" value="{{ form_data.order_date }}" required>
+                    </div>
+                </div>
+            </fieldset>
+
+            <!-- Client Details -->
+            <fieldset>
+                <legend>Client Information</legend>
+
+                <div class="form-group">
+                    <label for="client_name">Client Name <span class="required">*</span></label>
+                    <input type="text" id="client_name" name="client_name" value="{{ form_data.client_name }}" placeholder="Acme Corporation" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="client_address">Address <span class="required">*</span></label>
+                    <textarea id="client_address" name="client_address" rows="3" placeholder="123 Business Street, City, State, Zip" required>{{ form_data.client_address }}</textarea>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="client_gstin">GSTIN <span class="required">*</span></label>
+                        <input type="text" id="client_gstin" name="client_gstin" value="{{ form_data.client_gstin }}" placeholder="29AABCT1234H1Z0">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="place_of_supply">Place of Supply <span class="required">*</span></label>
+                        <select id="place_of_supply" name="place_of_supply" required>
+                            <option value="">Select State</option>
+                            {% for value, label in places_of_supply %}
+                            <option value="{{ value }}" {% if form_data.place_of_supply == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+            </fieldset>
+
+            <!-- Line Items -->
+            <fieldset>
+                <legend>Line Items</legend>
+
+                <div class="line-items-container">
+                    <table class="line-items-table">
+                        <thead>
+                            <tr>
+                                <th>Description</th>
+                                <th>HSN/SAC</th>
+                                <th>Qty</th>
+                                <th>Rate (₹)</th>
+                                <th>Amount (₹)</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="lineItemsBody">
+                            <tr class="line-item" data-index="0">
+                                <td><input type="text" class="description" placeholder="Service description" required></td>
+                                <td><input type="text" class="hsn_sac" placeholder="9991" maxlength="4"></td>
+                                <td><input type="number" class="quantity" value="1" step="1" required></td>
+                                <td><input type="number" class="rate" step="0.01" required></td>
+                                <td class="amount">₹ 0</td>
+                                <td><button type="button" class="btn-remove" onclick="removeLineItem(this)">✕</button></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <button type="button" class="btn btn-secondary" onclick="addLineItem()">+ Add Line Item</button>
+            </fieldset>
+
+            <!-- Discounts & Totals -->
+            <fieldset>
+                <legend>Amounts & Deductions</legend>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="discount_amount">Discount (₹)</label>
+                        <input type="number" id="discount_amount" name="discount_amount" value="{{ form_data.discount_amount|default:'0' }}" step="0.01">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="deductions_amount">Deductions (₹)</label>
+                        <input type="number" id="deductions_amount" name="deductions_amount" value="{{ form_data.deductions_amount|default:'0' }}" step="0.01">
+                    </div>
+                </div>
+
+                <div class="totals-display">
+                    <div class="total-row">
+                        <span>Subtotal:</span>
+                        <span id="subtotal">₹ 0</span>
+                    </div>
+                    <div class="total-row">
+                        <span>Tax (GST/IGST):</span>
+                        <span id="tax">₹ 0</span>
+                    </div>
+                    <div class="total-row grand">
+                        <span>Grand Total:</span>
+                        <span id="grandtotal">₹ 0</span>
+                    </div>
+                </div>
+            </fieldset>
+
+            <!-- Form Actions -->
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary btn-large">Create Invoice</button>
+                <a href="{% url 'invoice-list' %}" class="btn btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+.invoice-form-page {
+    padding: 20px;
+    background: #f5f5f5;
+    min-height: calc(100vh - 100px);
+}
+
+.form-container {
+    max-width: 900px;
+    margin: 0 auto;
+    background: white;
+    padding: 30px;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.form-container h1 {
+    margin: 0 0 20px 0;
+    font-size: 24px;
+    color: #1f2937;
+}
+
+fieldset {
+    border: none;
+    padding: 0;
+    margin-bottom: 25px;
+}
+
+legend {
+    font-size: 16px;
+    font-weight: 600;
+    color: #374151;
+    padding: 0 0 10px 0;
+    border-bottom: 2px solid #e5e7eb;
+    margin-bottom: 15px;
+    width: 100%;
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+}
+
+label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 600;
+    color: #374151;
+    font-size: 14px;
+}
+
+.required {
+    color: #ef4444;
+}
+
+input[type="text"],
+input[type="email"],
+input[type="number"],
+input[type="date"],
+select,
+textarea {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    font-size: 14px;
+    font-family: inherit;
+    background: white;
+    box-sizing: border-box;
+}
+
+input[type="text"]:focus,
+input[type="email"]:focus,
+input[type="number"]:focus,
+input[type="date"]:focus,
+select:focus,
+textarea:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+textarea {
+    resize: vertical;
+    min-height: 80px;
+}
+
+.line-items-container {
+    margin-bottom: 15px;
+    overflow-x: auto;
+}
+
+.line-items-table {
+    width: 100%;
+    border-collapse: collapse;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.line-items-table thead {
+    background: #f3f4f6;
+    border-bottom: 1px solid #d1d5db;
+}
+
+.line-items-table th {
+    padding: 10px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 13px;
+    color: #374151;
+}
+
+.line-items-table td {
+    padding: 10px;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.line-item input {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+.line-item input:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
+}
+
+.line-item .amount {
+    padding: 8px 0;
+    text-align: right;
+    font-weight: 600;
+}
+
+.btn-remove {
+    background: #fee2e2;
+    color: #dc2626;
+    border: none;
+    padding: 6px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.btn-remove:hover {
+    background: #fecaca;
+}
+
+.totals-display {
+    background: #f9fafb;
+    padding: 15px;
+    border-radius: 4px;
+    border: 1px solid #e5e7eb;
+}
+
+.total-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 0;
+    font-size: 14px;
+    color: #374151;
+}
+
+.total-row.grand {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1f2937;
+    padding: 15px 0;
+    border-top: 2px solid #d1d5db;
+    border-bottom: 2px solid #d1d5db;
+    background: #f3f4f6;
+    padding: 15px;
+    border-radius: 4px;
+    margin-top: 10px;
+}
+
+.form-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 25px;
+}
+
+.btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 600;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 14px;
+}
+
+.btn-primary {
+    background: #2563eb;
+    color: white;
+    flex: 1;
+}
+
+.btn-primary:hover {
+    background: #1d4ed8;
+}
+
+.btn-primary.btn-large {
+    padding: 12px 24px;
+    font-size: 15px;
+}
+
+.btn-secondary {
+    background: #e5e7eb;
+    color: #374151;
+    flex: 1;
+}
+
+.btn-secondary:hover {
+    background: #d1d5db;
+}
+
+.alert {
+    padding: 15px;
+    border-radius: 4px;
+    margin-bottom: 20px;
+    border: 1px solid;
+}
+
+.alert-error {
+    background: #fee2e2;
+    border-color: #fecaca;
+    color: #991b1b;
+}
+
+.alert-error p {
+    margin: 0 0 10px 0;
+}
+
+.alert-error ul {
+    margin: 0;
+    padding-left: 20px;
+}
+
+@media (max-width: 768px) {
+    .form-container {
+        padding: 20px;
+    }
+
+    .form-row {
+        grid-template-columns: 1fr;
+    }
+
+    .form-actions {
+        flex-direction: column;
+    }
+
+    .btn {
+        width: 100%;
+    }
+
+    .line-items-table {
+        font-size: 12px;
+    }
+
+    .line-items-table th,
+    .line-items-table td {
+        padding: 8px;
+    }
+
+    .line-item input {
+        padding: 6px;
+    }
+}
+</style>
+
+<script>
+function addLineItem() {
+    const body = document.getElementById('lineItemsBody');
+    const index = body.children.length;
+    const row = document.createElement('tr');
+    row.className = 'line-item';
+    row.dataset.index = index;
+    row.innerHTML = `
+        <td><input type="text" class="description" placeholder="Service description" required></td>
+        <td><input type="text" class="hsn_sac" placeholder="9991" maxlength="4"></td>
+        <td><input type="number" class="quantity" value="1" step="1" required></td>
+        <td><input type="number" class="rate" step="0.01" required></td>
+        <td class="amount">₹ 0</td>
+        <td><button type="button" class="btn-remove" onclick="removeLineItem(this)">✕</button></td>
+    `;
+    
+    row.querySelectorAll('input[type="number"]').forEach(input => {
+        input.addEventListener('change', updateLineItemAmount);
+    });
+    
+    body.appendChild(row);
+}
+
+function removeLineItem(btn) {
+    const body = document.getElementById('lineItemsBody');
+    if (body.children.length > 1) {
+        btn.closest('tr').remove();
+        updateTotals();
+    } else {
+        alert('You must have at least one line item');
+    }
+}
+
+function updateLineItemAmount(e) {
+    const row = e.target.closest('tr');
+    const qty = parseFloat(row.querySelector('.quantity').value) || 0;
+    const rate = parseFloat(row.querySelector('.rate').value) || 0;
+    const amount = qty * rate;
+    
+    row.querySelector('.amount').textContent = '₹ ' + amount.toFixed(2);
+    updateTotals();
+}
+
+function updateTotals() {
+    let subtotal = 0;
+    document.querySelectorAll('.line-item').forEach(row => {
+        const qty = parseFloat(row.querySelector('.quantity').value) || 0;
+        const rate = parseFloat(row.querySelector('.rate').value) || 0;
+        subtotal += qty * rate;
+    });
+    
+    const discount = parseFloat(document.getElementById('discount_amount').value) || 0;
+    const deductions = parseFloat(document.getElementById('deductions_amount').value) || 0;
+    const netTaxable = subtotal - discount - deductions;
+    
+    const placeOfSupply = document.getElementById('place_of_supply').value;
+    let taxRate = 0.18; // Default IGST
+    if (placeOfSupply === 'telangana') {
+        taxRate = 0.18; // CGST + SGST (9% + 9%)
+    }
+    
+    const tax = netTaxable * taxRate;
+    const grandTotal = netTaxable + tax;
+    
+    document.getElementById('subtotal').textContent = '₹ ' + subtotal.toFixed(2);
+    document.getElementById('tax').textContent = '₹ ' + tax.toFixed(2);
+    document.getElementById('grandtotal').textContent = '₹ ' + grandTotal.toFixed(2);
+}
+
+// Add event listeners to all inputs
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.line-item input[type="number"]').forEach(input => {
+        input.addEventListener('change', updateLineItemAmount);
+    });
+    
+    document.getElementById('discount_amount').addEventListener('change', updateTotals);
+    document.getElementById('deductions_amount').addEventListener('change', updateTotals);
+    document.getElementById('place_of_supply').addEventListener('change', updateTotals);
+    
+    if (!document.getElementById('invoice_date').value) {
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('invoice_date').value = today;
+        document.getElementById('order_date').value = today;
+    }
+
+    document.querySelector('.invoice-form').addEventListener('submit', function(event) {
+        const lineItems = [];
+        document.querySelectorAll('.line-item').forEach(row => {
+            const description = row.querySelector('.description').value.trim();
+            const quantity = row.querySelector('.quantity').value;
+            const rate = row.querySelector('.rate').value;
+
+            if (description && quantity && rate) {
+                lineItems.push({
+                    description: description,
+                    hsn_sac: row.querySelector('.hsn_sac').value.trim(),
+                    quantity: quantity,
+                    rate: rate
+                });
+            }
+        });
+
+        if (!lineItems.length) {
+            event.preventDefault();
+            alert('Add at least one complete line item.');
+            return;
+        }
+
+        document.getElementById('line_items_json').value = JSON.stringify(lineItems);
+    });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <h2>Print Batches</h2>
+  <form method="post" action="/ops/print-batches/generate/">
+    {% csrf_token %}
+    <input type="text" name="notes" placeholder="Optional notes" />
+    <button type="submit">Generate Draft Batch</button>
+  </form>
+</div>
+
+<div class="card">
+  <h3>Open Printable Demand</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Design</th><th>Variant</th><th>Size</th><th>Colour</th><th>Qty</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in printable %}
+      <tr>
+        <td>{{ row.printed_sku__design__name }}</td>
+        <td>{{ row.printed_sku__variant|default:"BASE" }}</td>
+        <td>{{ row.printed_sku__size|default:"NA" }}</td>
+        <td>{{ row.printed_sku__colour }}</td>
+        <td>{{ row.total_qty }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5" class="muted">No demand right now.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h3>Recent Batches</h3>
+  <table>
+    <thead><tr><th>ID</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead>
+    <tbody>
+      {% for batch in batches %}
+      <tr>
+        <td>{{ batch.id }}</td>
+        <td>{{ batch.status }}</td>
+        <td>{{ batch.created_at }}</td>
+        <td>
+          {% if batch.status == "draft" %}
+          <form method="post" action="/ops/print-batches/{{ batch.id }}/confirm/">
+            {% csrf_token %}
+            <input type="text" name="vendor_name" placeholder="Vendor" value="Primary Vendor" />
+            <button type="submit">Confirm</button>
+          </form>
+          {% else %}
+          -
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

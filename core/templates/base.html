@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  {% load static %}
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}BoldERP{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400;1,600&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bi-cream:      #f4f4f4;
+      --bi-parchment:  #ececec;
+      --bi-terra:      #0f0f0f;
+      --bi-terra-dark: #000000;
+      --bi-ink:        #0f0f0f;
+      --bi-mid:        #5f5f5f;
+      --bi-border:     #d8d8d8;
+      --bi-white:      #ffffff;
+      --bi-card-bg:    #ffffff;
+      --sidebar-bg:    #1a1a1a;
+      --sidebar-text:  #e0e0e0;
+    }
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: "DM Sans", "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 0;
+      background: var(--bi-cream);
+      color: var(--bi-ink);
+      line-height: 1.6;
+      font-size: 14px;
+      display: flex;
+    }
+
+    /* ── Sidebar ── */
+    .bi-sidebar {
+      width: 260px;
+      background: var(--sidebar-bg);
+      color: var(--sidebar-text);
+      position: fixed;
+      left: 0;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 2px 0 8px rgba(0,0,0,0.3);
+      z-index: 1000;
+      padding: 0;
+      margin: 0;
+    }
+
+    .bi-sidebar-logo {
+      padding: 20px 16px;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+      text-align: center;
+      flex-shrink: 0;
+    }
+
+    .bi-sidebar-logo svg {
+      width: 100%;
+      max-width: 140px;
+      height: auto;
+      display: block;
+    }
+
+    .bi-sidebar-modules {
+      flex: 1;
+      padding: 16px 0;
+      overflow-y: auto;
+    }
+
+    .bi-module-tab {
+      padding: 12px 18px;
+      margin: 0;
+      border: none;
+      background: none;
+      color: #a0a0a0;
+      width: 100%;
+      text-align: left;
+      font-family: "DM Sans", sans-serif;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      cursor: pointer;
+      border-left: 3px solid transparent;
+      transition: all 0.18s;
+      text-transform: uppercase;
+    }
+
+    .bi-module-tab:hover {
+      background: rgba(255,255,255,0.08);
+      border-left-color: #ffffff;
+    }
+
+    .bi-module-tab.active {
+      background: rgba(255,255,255,0.1);
+      border-left-color: #ffffff;
+    }
+
+    .bi-module-links {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.25s ease;
+      background: rgba(0,0,0,0.3);
+    }
+
+    .bi-module-links.open {
+      max-height: 600px;
+    }
+
+    .bi-module-link {
+      display: block;
+      padding: 10px 18px;
+      padding-left: 36px;
+      color: #b0b0b0;
+      text-decoration: none;
+      font-size: 12px;
+      border-left: 3px solid transparent;
+      transition: all 0.18s;
+      font-weight: 500;
+    }
+
+    .bi-module-link:hover,
+    .bi-module-link.active {
+      background: rgba(255,255,255,0.05);
+      color: #ffffff;
+      border-left-color: #ffffff;
+    }
+
+    .bi-sidebar-footer {
+      padding: 16px;
+      border-top: 1px solid rgba(255,255,255,0.1);
+      flex-shrink: 0;
+    }
+
+    .bi-logout-btn {
+      width: 100%;
+      padding: 10px 14px;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 6px;
+      color: #b0b0b0;
+      font-family: "DM Sans", sans-serif;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      text-transform: uppercase;
+      transition: all 0.18s;
+    }
+
+    .bi-logout-btn:hover {
+      background: rgba(255,255,255,0.12);
+      color: #ffffff;
+    }
+
+    /* ── Main content area ── */
+    .bi-main-wrapper {
+      flex: 1;
+      margin-left: 260px;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--bi-ink);
+      padding: 0 28px;
+      border-bottom: 1px solid var(--bi-border);
+    }
+    nav {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+      flex-wrap: wrap;
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 12px 0;
+    }
+
+    /* ── Main ── */
+    main {
+      flex: 1;
+      max-width: 1400px;
+      margin: 0 auto;
+      width: 100%;
+      padding: 28px 24px;
+    }
+
+    /* ── Forms ── */
+    input[type="text"], input[type="email"], input[type="password"], input[type="number"],
+    input[type="date"], input[type="datetime-local"], textarea, select {
+      padding: 8px 12px;
+      border: 1px solid var(--bi-border);
+      border-radius: 4px;
+      font-family: "DM Sans", sans-serif;
+      font-size: 13px;
+      background: var(--bi-card-bg);
+      color: var(--bi-ink);
+      transition: border-color 0.18s;
+    }
+    input[type="text"]:focus, input[type="email"]:focus, input[type="password"]:focus, 
+    input[type="number"]:focus, input[type="date"]:focus, input[type="datetime-local"]:focus,
+    textarea:focus, select:focus {
+      outline: none;
+      border-color: var(--bi-terra);
+      box-shadow: 0 0 0 3px rgba(15, 15, 15, 0.08);
+    }
+
+    button, input[type="submit"] {
+      padding: 10px 16px;
+      background: var(--bi-ink);
+      color: var(--bi-white);
+      border: none;
+      border-radius: 4px;
+      font-family: "DM Sans", sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      transition: background 0.18s;
+    }
+    button:hover, input[type="submit"]:hover {
+      background: var(--bi-terra-dark);
+    }
+
+    /* ── Tables ── */
+    table {
+      border-collapse: collapse;
+      border-spacing: 0;
+      width: 100%;
+      max-width: 100%;
+    }
+    table th, table td {
+      padding: 12px 14px;
+      text-align: left;
+      border-bottom: 1px solid var(--bi-border);
+    }
+    table th {
+      background: var(--bi-parchment);
+      font-weight: 600;
+      font-size: 12px;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      color: var(--bi-mid);
+    }
+    table tbody tr:hover {
+      background: var(--bi-parchment);
+    }
+
+    /* ── Messages ── */
+    .messages {
+      margin-bottom: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .message {
+      padding: 12px 16px;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+    .message.success {
+      background: #e6f7e6;
+      color: #1a5a1a;
+      border-left: 4px solid #4caf50;
+    }
+    .message.error {
+      background: #ffe6e6;
+      color: #5a1a1a;
+      border-left: 4px solid #f44336;
+    }
+    .message.warning {
+      background: #fff3e0;
+      color: #5a3a1a;
+      border-left: 4px solid #ff9800;
+    }
+    .message.info {
+      background: #e3f2fd;
+      color: #1a3a5a;
+      border-left: 4px solid #2196f3;
+    }
+
+    /* ── Cards & Sections ── */
+    .card, section {
+      background: var(--bi-card-bg);
+      border: 1px solid var(--bi-border);
+      border-radius: 6px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .card h2, section h2 {
+      margin: 0 0 16px 0;
+      padding: 0;
+      font-family: "Cormorant Garamond", serif;
+      font-size: 24px;
+      font-style: italic;
+      color: var(--bi-ink);
+      border-bottom: 1px solid var(--bi-border);
+      padding-bottom: 12px;
+    }
+
+    /* ── Stat Cards ── */
+    .stat-card {
+      display: inline-block;
+      width: 23%;
+      margin-right: 2%;
+      margin-bottom: 16px;
+      padding: 16px;
+      background: var(--bi-card-bg);
+      border: 1px solid var(--bi-border);
+      border-radius: 4px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.18s;
+    }
+    .stat-card:hover {
+      border-color: var(--bi-terra);
+      box-shadow: 0 0 0 3px rgba(30, 30, 30, 0.12);
+    }
+
+    /* ── Status badges ── */
+    .status-badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 99px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      font-family: "DM Sans", sans-serif;
+    }
+    .status-new              { background: #f1f1f1; color: #242424; }
+    .status-needs_printing   { background: #ececec; color: #1f1f1f; }
+    .status-in_printing      { background: #e8e8e8; color: #202020; }
+    .status-ready_to_ship    { background: #e4e4e4; color: #111111; }
+    .status-shipped          { background: #dcdcdc; color: #101010; }
+    .status-cancelled        { background: #efefef; color: #000000; }
+
+    /* ── Responsive ── */
+    @media (max-width: 768px) {
+      .bi-sidebar { width: 200px; }
+      .bi-main-wrapper { margin-left: 200px; }
+      header { padding: 0 16px; }
+      nav a.nav-link { padding: 12px 10px; font-size: 12px; }
+      main { padding: 16px; }
+      table { font-size: 12px; }
+      tr th, tr td { padding: 8px 10px; }
+    }
+  </style>
+  {% block extra_css %}{% endblock %}
+</head>
+<body>
+  <!-- Sidebar -->
+  <aside class="bi-sidebar">
+    <div class="bi-sidebar-logo">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 176 64" role="img" aria-label="Bold and Italic ERP">
+        <text x="6" y="48" fill="#ffffff" font-size="54" font-family="Georgia, serif" font-style="italic" font-weight="700">B</text>
+        <text x="44" y="27" fill="#ffffff" font-size="11" font-family="Arial, sans-serif" font-weight="700" letter-spacing="2.4">BOLD &amp; ITALIC</text>
+        <text x="44" y="43" fill="#d7d7d7" font-size="9" font-family="Arial, sans-serif" font-weight="600" letter-spacing="2.1">ERP</text>
+      </svg>
+    </div>
+
+    <div class="bi-sidebar-modules">
+      {% if can_inventory %}
+      <button class="bi-module-tab{% if '/ops/inventory/' in request.path or '/ops/orders/' in request.path or '/ops/print-batches/' in request.path or '/ops/receive/' in request.path or '/ops/forecast/' in request.path or '/ops/audit-log/' in request.path or '/ops/inventory/skus/' in request.path or '/ops/inventory/import/' in request.path %} active{% endif %}" onclick="toggleModule('inventory', event)" data-module="inventory">
+        Inventory
+      </button>
+      <div id="inventory-links" class="bi-module-links{% if '/ops/inventory/' in request.path or '/ops/orders/' in request.path or '/ops/print-batches/' in request.path or '/ops/receive/' in request.path or '/ops/forecast/' in request.path or '/ops/audit-log/' in request.path or '/ops/inventory/skus/' in request.path or '/ops/inventory/import/' in request.path %} open{% endif %}">
+        <a href="{% url 'order-list' %}" class="bi-module-link{% if '/ops/inventory/orders/' in request.path or '/ops/orders/' in request.path %} active{% endif %}">Orders</a>
+        <a href="{% url 'sku-manager' %}" class="bi-module-link{% if '/ops/inventory/skus/' in request.path %} active{% endif %}">Adjust Stock</a>
+        <a href="{% url 'print-batch-suggest' %}" class="bi-module-link{% if '/ops/inventory/print-batches/' in request.path or '/ops/print-batches/' in request.path %} active{% endif %}">Print Batches</a>
+        <a href="{% url 'receive-dashboard' %}" class="bi-module-link{% if '/ops/inventory/receive/' in request.path or '/ops/receive/' in request.path %} active{% endif %}">Receive</a>
+        <a href="{% url 'forecast' %}" class="bi-module-link{% if '/ops/inventory/forecast/' in request.path or '/ops/forecast/' in request.path %} active{% endif %}">Forecast</a>
+        <a href="{% url 'adjust-inventory' %}" class="bi-module-link{% if '/ops/inventory/adjust/' in request.path %} active{% endif %}">Manual Adjust</a>
+        <a href="{% url 'audit-log' %}" class="bi-module-link{% if '/ops/inventory/audit-log/' in request.path or '/ops/audit-log/' in request.path %} active{% endif %}">Audit Log</a>
+        <a href="{% url 'vendor-list' %}" class="bi-module-link{% if '/ops/inventory/vendors/' in request.path %} active{% endif %}">Vendors</a>
+        <a href="{% url 'webhook-event-log' %}" class="bi-module-link{% if '/ops/inventory/webhook-events/' in request.path %} active{% endif %}">Webhook Events</a>
+        <a href="{% url 'import-test-data' %}" class="bi-module-link{% if '/ops/inventory/import/' in request.path %} active{% endif %}">Import Data</a>
+      </div>
+      {% endif %}
+
+      {% if can_sales %}
+      <button class="bi-module-tab{% if '/ops/sales/' in request.path %} active{% endif %}" onclick="toggleModule('sales', event)" data-module="sales">
+        Sales
+      </button>
+      <div id="sales-links" class="bi-module-links{% if '/ops/sales/' in request.path %} open{% endif %}">
+        <a href="{% url 'sales-dashboard' %}" class="bi-module-link{% if request.path == '/ops/sales/' %} active{% endif %}">Dashboard</a>
+      </div>
+      {% endif %}
+
+      {% if can_finance %}
+      <button class="bi-module-tab{% if '/ops/finance/' in request.path %} active{% endif %}" onclick="toggleModule('finance', event)" data-module="finance">
+        Finance
+      </button>
+      <div id="finance-links" class="bi-module-links{% if '/ops/finance/' in request.path %} open{% endif %}">
+        <a href="{% url 'finance-dashboard' %}" class="bi-module-link{% if request.path == '/ops/finance/' %} active{% endif %}">Dashboard</a>
+        <a href="{% url 'expense-list' %}" class="bi-module-link{% if request.path == '/ops/finance/expenses/' %} active{% endif %}">Expenses</a>
+        <a href="{% url 'expense-create' %}" class="bi-module-link{% if request.path == '/ops/finance/expenses/new/' %} active{% endif %}">Create Expense</a>
+        <a href="{% url 'reconciliation' %}" class="bi-module-link{% if request.path == '/ops/finance/reconciliation/' %} active{% endif %}">Reconciliation</a>
+        <a href="{% url 'invoice-list' %}" class="bi-module-link{% if '/ops/finance/invoices/' in request.path and request.path != '/ops/finance/invoices/new/' %} active{% endif %}">Invoices</a>
+        <a href="{% url 'invoice-create' %}" class="bi-module-link{% if request.path == '/ops/finance/invoices/new/' %} active{% endif %}">Create Invoice</a>
+      </div>
+      {% endif %}
+
+      {% if can_admin %}
+      <button class="bi-module-tab{% if '/admin/' in request.path %} active{% endif %}" onclick="toggleModule('admin', event)" data-module="admin">
+        Admin
+      </button>
+      <div id="admin-links" class="bi-module-links{% if '/admin/' in request.path %} open{% endif %}">
+        <a href="/admin/" class="bi-module-link{% if '/admin/' in request.path %} active{% endif %}">Django Admin</a>
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="bi-sidebar-footer">
+      <form method="post" action="/accounts/logout/" style="margin:0;">
+        {% csrf_token %}
+        <button type="submit" class="bi-logout-btn">Logout</button>
+      </form>
+    </div>
+  </aside>
+
+  <!-- Main wrapper -->
+  <div class="bi-main-wrapper">
+    <header>
+      <nav style="justify-content:space-between;">
+        <span style="color:#cdcdcd;font-size:13px;">
+          {% if '/ops/inventory/' in request.path or '/ops/orders/' in request.path or '/ops/print-batches/' in request.path or '/ops/receive/' in request.path or '/ops/forecast/' in request.path or '/ops/audit-log/' in request.path or '/ops/inventory/skus/' in request.path or '/ops/inventory/webhook-events/' in request.path or '/ops/inventory/import/' in request.path %}
+            Inventory
+          {% elif '/ops/sales/' in request.path %}
+            Sales
+          {% elif '/ops/finance/' in request.path %}
+            Finance
+          {% elif '/admin/' in request.path %}
+            Admin
+          {% else %}
+            Bold &amp; Italic ERP
+          {% endif %}
+        </span>
+        <span style="color:#888;font-size:12px;">{{ request.user.get_full_name|default:request.user.username }}</span>
+      </nav>
+    </header>
+
+    <main>
+      {% if messages %}
+      <div class="messages">
+        {% for message in messages %}
+        <div class="message {{ message.tags }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+
+  <script>
+    function toggleModule(moduleName, event) {
+      event.preventDefault();
+      const linksElement = document.getElementById(moduleName + '-links');
+      const tabElement = event.target.closest('.bi-module-tab');
+
+      // Close all other modules
+      document.querySelectorAll('.bi-module-links.open').forEach(el => {
+        if (el.id !== moduleName + '-links') {
+          el.classList.remove('open');
+        }
+      });
+
+      document.querySelectorAll('.bi-module-tab.active').forEach(el => {
+        if (el.dataset.module !== moduleName) {
+          el.classList.remove('active');
+        }
+      });
+
+      // Toggle current module
+      linksElement.classList.toggle('open');
+      tabElement.classList.toggle('active');
+    }
+  </script>
+</body>
+</html>

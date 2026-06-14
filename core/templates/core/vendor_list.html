@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Vendors{% endblock %}
+{% block content %}
+<div style="max-width:800px;margin:0 auto;padding:24px 16px">
+
+  <h2 style="margin-bottom:20px">Vendors</h2>
+
+  {% if messages %}
+    {% for msg in messages %}
+      <div style="padding:10px 14px;margin-bottom:12px;border-radius:4px;background:{% if msg.tags == 'success' %}#d4edda{% elif msg.tags == 'error' %}#f8d7da{% else %}#fff3cd{% endif %}">
+        {{ msg }}
+      </div>
+    {% endfor %}
+  {% endif %}
+
+  {% if is_admin %}
+  <div style="background:#f9f9f9;border:1px solid #ddd;border-radius:6px;padding:20px;margin-bottom:28px">
+    <h3 style="margin-top:0;margin-bottom:16px;font-size:16px">Add Vendor</h3>
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="create">
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+        <div>
+          <label style="display:block;font-size:13px;margin-bottom:4px;font-weight:600">Name *</label>
+          <input name="name" type="text" placeholder="e.g. Print Masters" required
+            style="padding:8px 10px;border:1px solid #ccc;border-radius:4px;width:220px">
+        </div>
+        <div>
+          <label style="display:block;font-size:13px;margin-bottom:4px;font-weight:600">Contact</label>
+          <input name="contact" type="text" placeholder="Phone / email"
+            style="padding:8px 10px;border:1px solid #ccc;border-radius:4px;width:240px">
+        </div>
+        <button type="submit"
+          style="padding:8px 20px;background:#111;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:14px">
+          Create
+        </button>
+      </div>
+    </form>
+  </div>
+  {% endif %}
+
+  <table style="width:100%;border-collapse:collapse">
+    <thead>
+      <tr style="border-bottom:2px solid #ddd;text-align:left">
+        <th style="padding:8px 10px;font-size:13px">NAME</th>
+        <th style="padding:8px 10px;font-size:13px">CONTACT</th>
+        <th style="padding:8px 10px;font-size:13px">STATUS</th>
+        {% if is_admin %}<th style="padding:8px 10px;font-size:13px">ACTIONS</th>{% endif %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for vendor in vendors %}
+      <tr style="border-bottom:1px solid #eee;{% if not vendor.is_active %}opacity:0.5{% endif %}">
+        <td style="padding:10px 10px;font-weight:600">{{ vendor.name }}</td>
+        <td style="padding:10px 10px;color:#555">{{ vendor.contact|default:"—" }}</td>
+        <td style="padding:10px 10px">
+          {% if vendor.is_active %}
+            <span style="background:#d4edda;color:#155724;padding:2px 8px;border-radius:10px;font-size:12px">Active</span>
+          {% else %}
+            <span style="background:#f8d7da;color:#721c24;padding:2px 8px;border-radius:10px;font-size:12px">Inactive</span>
+          {% endif %}
+        </td>
+        {% if is_admin %}
+        <td style="padding:10px 10px">
+          <details style="display:inline-block">
+            <summary style="cursor:pointer;padding:4px 10px;border:1px solid #ccc;border-radius:4px;font-size:13px;list-style:none">
+              Edit ▾
+            </summary>
+            <div style="position:absolute;background:#fff;border:1px solid #ccc;border-radius:6px;padding:16px;min-width:280px;z-index:10;box-shadow:0 4px 12px rgba(0,0,0,0.1)">
+              <form method="post" style="margin-bottom:12px">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="update">
+                <input type="hidden" name="vendor_id" value="{{ vendor.id }}">
+                <div style="margin-bottom:8px">
+                  <label style="font-size:12px;font-weight:600">Name</label>
+                  <input name="name" value="{{ vendor.name }}" required
+                    style="display:block;width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:4px;margin-top:4px">
+                </div>
+                <div style="margin-bottom:10px">
+                  <label style="font-size:12px;font-weight:600">Contact</label>
+                  <input name="contact" value="{{ vendor.contact }}"
+                    style="display:block;width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:4px;margin-top:4px">
+                </div>
+                <button type="submit" style="padding:6px 14px;background:#111;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:13px">
+                  Save
+                </button>
+              </form>
+              <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="toggle">
+                <input type="hidden" name="vendor_id" value="{{ vendor.id }}">
+                <button type="submit"
+                  style="padding:6px 14px;background:{% if vendor.is_active %}#f8d7da;color:#721c24{% else %}#d4edda;color:#155724{% endif %};border:1px solid #ccc;border-radius:4px;cursor:pointer;font-size:13px">
+                  {% if vendor.is_active %}Deactivate{% else %}Activate{% endif %}
+                </button>
+              </form>
+            </div>
+          </details>
+        </td>
+        {% endif %}
+      </tr>
+      {% empty %}
+      <tr><td colspan="4" style="padding:24px 10px;text-align:center;color:#888">No vendors yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

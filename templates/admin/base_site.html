@@ -1,0 +1,10 @@
+{% extends "admin/base.html" %}
+{% load i18n %}
+
+{% block title %}{{ title }} | Bold &amp; Italic Ops{% endblock %}
+
+{% block branding %}
+<a href="{% url 'admin:index' %}" style="display:flex;align-items:center;gap:10px;text-decoration:none;padding:4px 0;">
+  <img src="/static/branding/bi-logo-mono.svg" alt="Bold &amp; Italic Admin" style="height:30px;width:auto;display:block;" />
+</a>
+{% endblock %}

@@ -1,0 +1,405 @@
+{% extends "base.html" %}
+
+{% block title %}Expense Details - BoldERP{% endblock %}
+
+{% block content %}
+<div class="expense-detail-page">
+    <!-- Breadcrumb Navigation -->
+    <div class="breadcrumb">
+        <a href="{% url 'expense-list' %}" class="breadcrumb-link">← Back to Expenses</a>
+    </div>
+
+    <div class="page-header">
+        <h1>📝 Expense Details</h1>
+    </div>
+
+    <div class="detail-container">
+        <div class="detail-card">
+            <div class="detail-section">
+                <h2>Reimbursement Information</h2>
+                <div class="detail-grid">
+                    <div class="detail-field">
+                        <label>Expense Date</label>
+                        <div class="value">{{ expense.expense_date|date:"M d, Y" }}</div>
+                    </div>
+                    <div class="detail-field">
+                        <label>Employee</label>
+                        <div class="value">{{ expense.paid_by }}</div>
+                    </div>
+                    <div class="detail-field">
+                        <label>Amount</label>
+                        <div class="value amount">₹{{ expense.amount_rupees|floatformat:2 }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="detail-section">
+                <h2>Entity & Person</h2>
+                <div class="detail-grid">
+                    <div class="detail-field">
+                        <label>Entity</label>
+                        <div class="value">{{ expense.entity }}</div>
+                    </div>
+                    <div class="detail-field">
+                        <label>Person/Client</label>
+                        <div class="value">{{ expense.person }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="detail-section">
+                <h2>Description</h2>
+                <div class="full-width-value">{{ expense.description }}</div>
+            </div>
+
+            {% if expense.remarks %}
+            <div class="detail-section">
+                <h2>Remarks</h2>
+                <div class="full-width-value">{{ expense.remarks }}</div>
+            </div>
+            {% endif %}
+
+            <div class="detail-section">
+                <h2>Status & Settlement</h2>
+                <div class="detail-grid">
+                    <div class="detail-field">
+                        <label>Current Status</label>
+                        <div class="value">
+                            <span class="status-badge status-{{ expense.status }}">
+                                {% if expense.status == 'pending' %}⏳ Pending
+                                {% elif expense.status == 'settled' %}✓ Settled
+                                {% elif expense.status == 'rejected' %}✗ Rejected
+                                {% endif %}
+                            </span>
+                        </div>
+                    </div>
+                    {% if expense.bank_reference %}
+                    <div class="detail-field">
+                        <label>Bank Reference</label>
+                        <div class="value">{{ expense.bank_reference }}</div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="action-buttons">
+                <a href="{% url 'expense-list' %}" class="btn btn-secondary">Back to Expenses</a>
+                {% if expense.status == 'pending' %}
+                <button type="button" class="btn btn-primary" onclick="openSettleModal()">Mark as Settled</button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Settle Modal -->
+    {% if expense.status == 'pending' %}
+    <div id="settleModal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Settle Expense</h2>
+                <button type="button" class="modal-close" onclick="closeSettleModal()">&times;</button>
+            </div>
+            <form method="post" action="{% url 'expense-settle' expense.id %}">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="bank_reference">Bank Transaction Reference Number <span class="required">*</span></label>
+                        <input type="text" id="bank_reference" name="bank_reference" required placeholder="e.g., TXN123456789" class="form-control">
+                        <small class="help-text">Enter the bank transaction reference number from your bank statement</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeSettleModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Settle & Confirm</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.expense-detail-page {
+    padding: 20px;
+    background: #f5f5f5;
+    min-height: calc(100vh - 100px);
+}
+
+.breadcrumb {
+    margin-bottom: 15px;
+}
+
+.breadcrumb-link {
+    color: #2563eb;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.breadcrumb-link:hover {
+    text-decoration: underline;
+}
+
+.page-header {
+    margin-bottom: 20px;
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+}
+
+.page-header h1 {
+    margin: 0;
+    font-size: 24px;
+    color: #1f2937;
+}
+
+.detail-container {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.detail-card {
+    background: white;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.detail-section {
+    padding: 20px;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.detail-section:last-child {
+    border-bottom: none;
+}
+
+.detail-section h2 {
+    margin: 0 0 15px 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+}
+
+.detail-field {
+    display: flex;
+    flex-direction: column;
+}
+
+.detail-field label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #6b7280;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+    letter-spacing: 0.5px;
+}
+
+.detail-field .value {
+    font-size: 14px;
+    color: #1f2937;
+    font-weight: 500;
+}
+
+.detail-field .amount {
+    font-size: 18px;
+    font-weight: 700;
+    color: #059669;
+}
+
+.full-width-value {
+    font-size: 14px;
+    color: #374151;
+    line-height: 1.6;
+    background: #f9fafb;
+    padding: 12px;
+    border-radius: 4px;
+    border-left: 3px solid #2563eb;
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.status-badge.status-pending {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.status-badge.status-settled {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.status-badge.status-rejected {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.action-buttons {
+    padding: 20px;
+    background: #f9fafb;
+    border-top: 1px solid #e5e7eb;
+    display: flex;
+    gap: 10px;
+}
+
+.btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 600;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 14px;
+}
+
+.btn-primary {
+    background: #2563eb;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #1d4ed8;
+}
+
+.btn-secondary {
+    background: #6b7280;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background: #4b5563;
+}
+
+/* Modal Styles */
+.modal {
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-content {
+    background-color: white;
+    padding: 0;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 500px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.modal-header {
+    padding: 20px;
+    border-bottom: 1px solid #e5e7eb;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-header h2 {
+    margin: 0;
+    font-size: 18px;
+    color: #1f2937;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 28px;
+    cursor: pointer;
+    color: #6b7280;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+}
+
+.modal-close:hover {
+    color: #1f2937;
+}
+
+.modal-body {
+    padding: 20px;
+}
+
+.modal-footer {
+    padding: 20px;
+    border-top: 1px solid #e5e7eb;
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+.form-group label {
+    display: block;
+    font-size: 14px;
+    font-weight: 600;
+    color: #1f2937;
+    margin-bottom: 8px;
+}
+
+.required {
+    color: #dc2626;
+}
+
+.form-control {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    font-size: 14px;
+    font-family: inherit;
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.help-text {
+    display: block;
+    font-size: 12px;
+    color: #6b7280;
+    margin-top: 5px;
+}
+</style>
+
+<script>
+function openSettleModal() {
+    document.getElementById('settleModal').style.display = 'flex';
+}
+
+function closeSettleModal() {
+    document.getElementById('settleModal').style.display = 'none';
+}
+
+window.onclick = function(event) {
+    const modal = document.getElementById('settleModal');
+    if (modal && event.target == modal) {
+        modal.style.display = 'none';
+    }
+}
+</script>
+{% endblock %}

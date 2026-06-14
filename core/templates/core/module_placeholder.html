@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}{{ module_title }} | BoldERP{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width:900px;">
+  <h2 style="margin-bottom:8px;">{{ module_title }}</h2>
+  <p class="muted" style="font-size:15px;line-height:1.7;">{{ module_description }}</p>
+  <p style="margin-top:18px;">This module route is active and role-protected, so future feature work can be added without URL changes.</p>
+</div>
+{% endblock %}

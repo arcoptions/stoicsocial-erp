@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Webhook Events | Bold &amp; Italic Ops{% endblock %}
+
+{% block content %}
+<h2 style="font-size:28px;margin:0 0 18px;">Webhook Events</h2>
+
+<div class="card" style="padding:18px 22px 14px;margin-bottom:18px;">
+  <form method="get" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
+    <div>
+      <label style="display:block;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--bi-mid,#5f5f5f);margin-bottom:5px;">Topic</label>
+      <select name="topic" onchange="this.form.submit()" style="border:1px solid var(--bi-border,#d8d8d8);border-radius:6px;padding:8px 12px;font-size:13px;background:#fff;">
+        <option value="">All topics</option>
+        {% for t in topics %}
+          <option value="{{ t }}" {% if filters.topic == t %}selected{% endif %}>{{ t }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% if filters.topic %}
+      <a href="{% url 'webhook-event-log' %}" style="padding:9px 16px;background:#ececec;border:1px solid #d8d8d8;border-radius:6px;color:#6b5a45;font-weight:600;font-size:13px;text-decoration:none;">Clear</a>
+    {% endif %}
+  </form>
+</div>
+
+<div class="card" style="padding:0;overflow-x:auto;">
+  {% if page_obj %}
+  <table>
+    <thead>
+      <tr>
+        <th>Topic</th>
+        <th>Idempotency Key</th>
+        <th>Received</th>
+        <th>Processed At</th>
+        <th>Order ID (from payload)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for event in page_obj %}
+      <tr>
+        <td><code style="font-size:12px;background:#f5f0eb;padding:2px 6px;border-radius:4px;">{{ event.topic }}</code></td>
+        <td><span class="muted" style="font-size:11px;word-break:break-all;">{{ event.idempotency_key }}</span></td>
+        <td style="white-space:nowrap;">
+          {{ event.created_at|date:"d M Y" }}<br>
+          <span class="muted" style="font-size:12px;">{{ event.created_at|time:"H:i:s" }}</span>
+        </td>
+        <td>
+          {% if event.processed_at %}
+            <span style="color:#166534;font-size:12px;">✓ {{ event.processed_at|time:"H:i:s" }}</span>
+          {% else %}
+            <span style="color:#b91c1c;font-size:12px;">⏳ Pending</span>
+          {% endif %}
+        </td>
+        <td>
+          {% with event.payload.id as oid %}
+            {% if oid %}<span class="muted" style="font-size:12px;">{{ oid }}</span>{% else %}—{% endif %}
+          {% endwith %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {# Pagination #}
+  {% if page_obj.has_other_pages %}
+  <div style="padding:14px 22px;display:flex;gap:8px;align-items:center;">
+    {% if page_obj.has_previous %}
+      <a href="?page={{ page_obj.previous_page_number }}&topic={{ filters.topic }}">&laquo; Prev</a>
+    {% endif %}
+    <span class="muted">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+    {% if page_obj.has_next %}
+      <a href="?page={{ page_obj.next_page_number }}&topic={{ filters.topic }}">Next &raquo;</a>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% else %}
+  <p style="padding:28px;color:var(--bi-mid);text-align:center;">No webhook events received yet. Shopify will send events here when orders are created/updated.</p>
+  {% endif %}
+</div>
+{% endblock %}

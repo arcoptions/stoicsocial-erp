@@ -1,0 +1,157 @@
+{% extends "admin/base.html" %}
+
+{% block extrastyle %}{{ block.super }}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,600;1,600&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bi-cream:     #f4f4f4;
+    --bi-parchment: #ececec;
+    --bi-terra:     #0f0f0f;
+    --bi-ink:       #0f0f0f;
+    --bi-mid:       #5f5f5f;
+    --bi-border:    #d8d8d8;
+  }
+
+  /* ── Header bar ── */
+  #header {
+    background: var(--bi-ink) !important;
+    color: #d7d7d7 !important;
+    padding: 0 24px !important;
+    height: 58px;
+    display: flex;
+    align-items: center;
+  }
+  #header a:link, #header a:visited { color: #d7d7d7 !important; }
+  #header a:hover { color: #ffffff !important; }
+  #user-tools a { color: #cfcfcf !important; }
+  #user-tools a:hover { color: #ffffff !important; }
+  #user-tools { color: #9a9a9a !important; }
+
+  /* ── Navigation ── */
+  div#nav-global { background: #1a1a1a !important; }
+
+  /* ── Breadcrumbs ── */
+  div.breadcrumbs {
+    background: var(--bi-parchment) !important;
+    color: var(--bi-mid) !important;
+    border-bottom: 1px solid var(--bi-border) !important;
+    padding: 10px 24px !important;
+    font-size: 13px !important;
+  }
+  div.breadcrumbs a { color: var(--bi-terra) !important; }
+
+  /* ── Page body ── */
+  body {
+    font-family: "DM Sans", "Segoe UI", sans-serif !important;
+    background: var(--bi-cream) !important;
+    color: var(--bi-ink) !important;
+  }
+
+  /* ── Module headings ── */
+  .module h2, .module caption, .inline-group h2 {
+    background: var(--bi-ink) !important;
+    color: #d4c4b0 !important;
+    font-family: "DM Sans", sans-serif !important;
+    font-size: 11px !important;
+    letter-spacing: 0.1em !important;
+    text-transform: uppercase !important;
+  }
+  div.module {
+    border: 1px solid var(--bi-border) !important;
+    border-radius: 8px !important;
+    overflow: hidden !important;
+  }
+
+  /* ── Content area ── */
+  #content { background: transparent !important; }
+  #content-main { background: transparent !important; }
+  .content-title { border-bottom: 2px solid var(--bi-border) !important; }
+
+  /* ── Buttons ── */
+  .button, input[type=submit], input[type=button], .submit-row input, a.button {
+    background: var(--bi-ink) !important;
+    border-color: var(--bi-ink) !important;
+    color: #ffffff !important;
+    border-radius: 6px !important;
+    font-family: "DM Sans", sans-serif !important;
+    font-size: 12px !important;
+    letter-spacing: 0.04em !important;
+    padding: 8px 18px !important;
+  }
+  .button:hover, input[type=submit]:hover, a.button:hover {
+    background: #2a2a2a !important;
+    border-color: #2a2a2a !important;
+  }
+  .button.default, input[type=submit].default {
+    background: #1f1f1f !important;
+    border-color: #1f1f1f !important;
+  }
+  .button.default:hover, input[type=submit].default:hover {
+    background: #000000 !important;
+    border-color: #000000 !important;
+  }
+  .deletelink, a.deletelink {
+    background: #000000 !important;
+    border-color: #000000 !important;
+  }
+
+  /* ── Links ── */
+  a:link, a:visited { color: var(--bi-terra) !important; }
+  a:hover { color: #000000 !important; }
+  #user-tools a:link, #user-tools a:visited { color: #cfcfcf !important; }
+  #user-tools a:hover { color: #ffffff !important; }
+
+  /* ── Dashboard ── */
+  .dashboard .module table td a { color: var(--bi-terra) !important; }
+  #content-related .module h2 { background: var(--bi-parchment) !important; color: var(--bi-ink) !important; }
+
+  /* ── Tables ── */
+  #result_list th, #result_list td { border-bottom: 1px solid var(--bi-border) !important; }
+  #result_list thead th {
+    background: var(--bi-parchment) !important;
+    color: var(--bi-mid) !important;
+    font-size: 10px !important;
+    letter-spacing: 0.08em !important;
+    text-transform: uppercase !important;
+  }
+  #result_list tr.row1 { background: var(--bi-cream) !important; }
+  #result_list tr.row2 { background: #fafafa !important; }
+  #result_list tr:hover td { background: #f0f0f0 !important; }
+  .paginator { color: var(--bi-mid) !important; }
+  .paginator a:link, .paginator a:visited { color: var(--bi-terra) !important; }
+
+  /* ── Forms ── */
+  .form-row { border-bottom: 1px solid var(--bi-border) !important; }
+  .aligned label { color: var(--bi-mid) !important; font-size: 12px !important; }
+  input[type=text], input[type=password], input[type=email], input[type=number], input[type=url],
+  select, textarea {
+    border: 1px solid var(--bi-border) !important;
+    border-radius: 5px !important;
+    font-family: "DM Sans", sans-serif !important;
+    font-size: 13px !important;
+  }
+  input:focus, select:focus, textarea:focus {
+    border-color: var(--bi-terra) !important;
+    box-shadow: 0 0 0 3px rgba(30,30,30,0.12) !important;
+    outline: none !important;
+  }
+
+  /* ── Sidebar / related ── */
+  #content-related { background: transparent !important; }
+  .related-widget-wrapper { border-radius: 6px !important; }
+
+  /* ── Submit row ── */
+  .submit-row {
+    background: var(--bi-parchment) !important;
+    border-top: 1px solid var(--bi-border) !important;
+    border-radius: 0 0 8px 8px !important;
+  }
+
+  /* ── Change list search ── */
+  #toolbar { background: var(--bi-parchment) !important; border-bottom: 1px solid var(--bi-border) !important; }
+  #searchbar { border: 1px solid var(--bi-border) !important; border-radius: 5px !important; }
+  input#searchbar:focus { border-color: var(--bi-terra) !important; box-shadow: 0 0 0 3px rgba(30,30,30,0.12) !important; }
+</style>
+{% endblock %}

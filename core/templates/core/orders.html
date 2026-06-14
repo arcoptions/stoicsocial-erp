@@ -1,0 +1,343 @@
+{% extends "base.html" %}
+{% block title %}Orders | Bold &amp; Italic Ops{% endblock %}
+
+{% block extra_css %}
+<style>
+  /* ── Dashboard stat cards ── */
+  .orders-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+    gap: 14px;
+    margin-bottom: 22px;
+    align-items: stretch;
+  }
+  .orders-stat-card {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    background: var(--bi-card-bg, #fffcf8);
+    border: 1px solid var(--bi-border, #e2d3be);
+    border-radius: 10px;
+    padding: 16px 18px;
+    min-width: 0;
+    min-height: 96px;
+    cursor: pointer;
+    transition: box-shadow 0.18s, border-color 0.18s;
+    text-decoration: none;
+  }
+  .orders-stat-card:hover {
+    box-shadow: 0 4px 14px rgba(26,18,8,0.10);
+    border-color: #111111;
+    text-decoration: none;
+  }
+  .orders-stat-card.active-filter {
+    border-color: #111111;
+    background: #f0f0f0;
+    box-shadow: 0 2px 8px rgba(20,20,20,0.14);
+  }
+  .orders-stat-card.good {
+    background: #ecfdf3;
+    border-color: #b7ebc6;
+  }
+  .orders-stat-card.good:hover {
+    border-color: #6dbb82;
+    box-shadow: 0 4px 14px rgba(18, 120, 56, 0.12);
+  }
+  .orders-stat-card.warn {
+    background: #fff5f5;
+    border-color: #f3c6c6;
+  }
+  .orders-stat-card.warn:hover {
+    border-color: #df8f8f;
+    box-shadow: 0 4px 14px rgba(176, 54, 54, 0.12);
+  }
+  .orders-stat-card.alert {
+    background: #feecec;
+    border-color: #e8a8a8;
+  }
+  .orders-stat-card.alert:hover {
+    border-color: #d36e6e;
+    box-shadow: 0 4px 14px rgba(166, 36, 36, 0.16);
+  }
+  .orders-stat-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--bi-mid, #5f5f5f);
+    margin-bottom: 6px;
+    line-height: 1.35;
+    word-break: normal;
+    overflow-wrap: break-word;
+  }
+  .orders-stat-value {
+    font-family: "Cormorant Garamond", serif;
+    font-size: 34px;
+    font-weight: 600;
+    color: var(--bi-ink, #1a1208);
+    line-height: 1;
+  }
+  .orders-stat-card.alert .orders-stat-value { color: #9f1239; }
+  .orders-stat-card.warn  .orders-stat-value { color: #b91c1c; }
+  .orders-stat-card.good  .orders-stat-value { color: #166534; }
+
+  /* ── Filter bar ── */
+  .filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: flex-end;
+  }
+  .filter-bar label {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--bi-mid, #5f5f5f);
+    margin-bottom: 5px;
+  }
+  .filter-bar select,
+  .filter-bar input {
+    border: 1px solid var(--bi-border, #d8d8d8);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 13px;
+    background: #fff;
+    color: var(--bi-ink, #0f0f0f);
+  }
+  .btn-clear {
+    padding: 9px 16px;
+    background: var(--bi-parchment, #ececec);
+    border: 1px solid var(--bi-border, #d8d8d8);
+    border-radius: 6px;
+    color: var(--bi-mid, #6b5a45);
+    font-weight: 600;
+    font-size: 13px;
+    text-decoration: none;
+    display: inline-block;
+  }
+  .btn-clear:hover { background: #ede3d5; text-decoration: none; }
+
+  @media (max-width: 1380px) {
+    .orders-stat-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 900px) {
+    .orders-stat-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  /* ── Bulk action bar ── */
+  #bulk-action-bar {
+    display: none;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    background: #1a1208;
+    color: #fff;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  #bulk-action-bar.visible { display: flex; }
+  #bulk-action-bar select {
+    padding: 6px 10px;
+    border-radius: 5px;
+    border: none;
+    font-size: 13px;
+    background: #fff;
+    color: #1a1208;
+    cursor: pointer;
+  }
+  #bulk-action-bar button {
+    padding: 7px 16px;
+    background: #e63946;
+    color: #fff;
+    border: none;
+    border-radius: 5px;
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  #bulk-action-bar button:hover { background: #c1121f; }
+  .order-checkbox { cursor: pointer; width: 16px; height: 16px; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{# ── Dashboard ── #}
+<div style="margin-bottom:6px;">
+  <h2 style="font-size:28px;margin:0 0 18px;">Orders</h2>
+</div>
+
+<div class="orders-stat-grid">
+  <a href="{% url 'order-list' %}" class="orders-stat-card {% if not filters.status and not filters.age %}active-filter{% endif %}">
+    <div class="orders-stat-label">Total</div>
+    <div class="orders-stat-value">{{ stats.total }}</div>
+  </a>
+  <a href="{% url 'order-list' %}?status=new" class="orders-stat-card {% if filters.status == 'new' %}active-filter{% endif %}">
+    <div class="orders-stat-label">New</div>
+    <div class="orders-stat-value">{{ stats.new }}</div>
+  </a>
+  <a href="{% url 'order-list' %}?status=needs_printing" class="orders-stat-card warn {% if filters.status == 'needs_printing' %}active-filter{% endif %}">
+    <div class="orders-stat-label">Needs Printing</div>
+    <div class="orders-stat-value">{{ stats.needs_printing }}</div>
+  </a>
+  <a href="{% url 'order-list' %}?status=in_printing" class="orders-stat-card {% if filters.status == 'in_printing' %}active-filter{% endif %}">
+    <div class="orders-stat-label">In Printing</div>
+    <div class="orders-stat-value">{{ stats.in_printing }}</div>
+  </a>
+  <a href="{% url 'order-list' %}?status=ready_to_ship" class="orders-stat-card good {% if filters.status == 'ready_to_ship' %}active-filter{% endif %}">
+    <div class="orders-stat-label">Ready to Ship</div>
+    <div class="orders-stat-value">{{ stats.ready_to_ship }}</div>
+  </a>
+  <a href="{% url 'order-list' %}?status=shipped" class="orders-stat-card {% if filters.status == 'shipped' %}active-filter{% endif %}">
+    <div class="orders-stat-label">Shipped</div>
+    <div class="orders-stat-value good">{{ stats.shipped }}</div>
+  </a>
+  {% if stats.stale %}
+  <a href="{% url 'order-list' %}?age=stale" class="orders-stat-card {% if stats.urgent %}alert{% else %}warn{% endif %} {% if filters.age == 'stale' %}active-filter{% endif %}" title="Open orders not shipped for 3+ days">
+    <div class="orders-stat-label">Stale ≥ 3 days</div>
+    <div class="orders-stat-value">{{ stats.stale }}</div>
+  </a>
+  {% endif %}
+  {% if stats.urgent %}
+  <a href="{% url 'order-list' %}?age=urgent" class="orders-stat-card alert {% if filters.age == 'urgent' %}active-filter{% endif %}" title="Open orders not shipped for 7+ days — urgent">
+    <div class="orders-stat-label">Urgent ≥ 7 days</div>
+    <div class="orders-stat-value">{{ stats.urgent }}</div>
+  </a>
+  {% endif %}
+</div>
+
+{# ── Filter bar ── #}
+<div class="card" style="padding:18px 22px;">
+  <form method="get" id="filter-form" class="filter-bar">
+    <div>
+      <label>Status</label>
+      <select name="status" id="status-select" onchange="document.getElementById('filter-form').submit()">
+        <option value="">All statuses</option>
+        {% for val, label in statuses %}
+          <option value="{{ val }}" {% if filters.status == val %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label>From</label>
+      <input type="date" name="date_from" value="{{ filters.date_from }}" onchange="document.getElementById('filter-form').submit()" />
+    </div>
+    <div>
+      <label>To</label>
+      <input type="date" name="date_to" value="{{ filters.date_to }}" onchange="document.getElementById('filter-form').submit()" />
+    </div>
+    <div>
+      <label>Search</label>
+      <input type="search" name="q" value="{{ filters.q }}" placeholder="Order no / name / email" style="min-width:200px;" />
+    </div>
+    <div>
+      <label>Design / SKU</label>
+      <input type="search" name="sku" value="{{ filters.sku }}" placeholder="e.g. Delulu, M" style="min-width:160px;" />
+    </div>
+    <button type="submit">Filter</button>
+    {% if filters.status or filters.age or filters.date_from or filters.date_to or filters.q or filters.sku %}
+      <a href="{% url 'order-list' %}" class="btn-clear">Clear</a>
+    {% endif %}
+  </form>
+</div>
+
+{# ── Order table ── #}
+<form method="post" action="{% url 'order-bulk-action' %}" id="bulk-form">
+  {% csrf_token %}
+  <input type="hidden" name="next" value="{{ request.get_full_path }}" />
+
+  <div id="bulk-action-bar">
+    <span id="bulk-count">0</span> order(s) selected
+    <select name="action" id="bulk-action-select">
+      <option value="">— Choose action —</option>
+      <option value="mark_shipped">Mark as Shipped</option>
+      <option value="mark_cancelled">Mark as Cancelled</option>
+      <option value="mark_needs_printing">Mark as Needs Printing</option>
+    </select>
+    <button type="submit" onclick="return confirmBulk()">Apply</button>
+    <span style="margin-left:auto;cursor:pointer;font-size:12px;opacity:.7;" onclick="clearAll()">✕ Clear</span>
+  </div>
+
+<div class="card" style="padding:0;overflow-x:auto;">
+  {% if orders %}
+  <table>
+    <thead>
+      <tr>
+        <th style="width:36px;text-align:center;"><input type="checkbox" id="select-all" title="Select all visible" /></th>
+        <th>Order No</th>
+        <th>Customer</th>
+        <th>Created</th>
+        <th>Status</th>
+        <th>Fulfillment</th>
+        <th>Lines</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for order in orders %}
+      <tr>
+        <td style="text-align:center;"><input type="checkbox" class="order-checkbox" name="order_ids" value="{{ order.id }}" /></td>
+        <td><strong>{{ order.order_no|default:order.shopify_order_id }}</strong></td>
+        <td>
+          {{ order.customer_name|default:"—" }}
+          {% if order.email %}<br><span class="muted" style="font-size:12px;">{{ order.email }}</span>{% endif %}
+        </td>
+        <td style="white-space:nowrap;">
+          {{ order.created_at|date:"d M Y" }}<br>
+          <span class="muted" style="font-size:12px;">{{ order.created_at|time:"H:i" }}</span>
+        </td>
+        <td><span class="status-badge status-{{ order.status }}">{{ order.get_status_display }}</span></td>
+        <td>{{ order.shopify_fulfillment_status|default:"—" }}</td>
+        <td style="text-align:center;">{{ order.line_count }}</td>
+        <td><a href="{% url 'order-detail' order.id %}">View →</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="padding:28px;color:var(--bi-mid);text-align:center;">No orders match the current filters.</p>
+  {% endif %}
+</div>
+</form>
+
+<script>
+  const bar = document.getElementById('bulk-action-bar');
+  const countEl = document.getElementById('bulk-count');
+  const selectAll = document.getElementById('select-all');
+
+  function updateBar() {
+    const checked = document.querySelectorAll('.order-checkbox:checked');
+    countEl.textContent = checked.length;
+    bar.classList.toggle('visible', checked.length > 0);
+  }
+
+  document.querySelectorAll('.order-checkbox').forEach(cb => cb.addEventListener('change', updateBar));
+
+  selectAll.addEventListener('change', function() {
+    document.querySelectorAll('.order-checkbox').forEach(cb => { cb.checked = this.checked; });
+    updateBar();
+  });
+
+  function clearAll() {
+    document.querySelectorAll('.order-checkbox').forEach(cb => cb.checked = false);
+    selectAll.checked = false;
+    updateBar();
+  }
+
+  function confirmBulk() {
+    const action = document.getElementById('bulk-action-select').value;
+    const count = document.querySelectorAll('.order-checkbox:checked').length;
+    if (!action) { alert('Please choose an action.'); return false; }
+    return confirm(`Apply "${action}" to ${count} order(s)?`);
+  }
+</script>
+{% endblock %}

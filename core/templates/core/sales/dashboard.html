@@ -1,0 +1,366 @@
+{% extends "base.html" %}
+{% block title %}Sales Insights | Bold &amp; Italic Ops{% endblock %}
+
+{% block extra_css %}
+<style>
+  .sales-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .sales-title {
+    margin: 0;
+    font-size: 30px;
+  }
+  .sales-subtitle {
+    margin: 6px 0 0;
+    color: var(--bi-mid, #5b6471);
+  }
+
+  .sales-filter-card {
+    background: #ffffff;
+    border: 1px solid #dde2ec;
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 16px;
+  }
+  .sales-filter-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: end;
+  }
+  .sales-filter-form label {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 11px;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: #4b5563;
+    font-weight: 600;
+  }
+  .sales-filter-form select,
+  .sales-filter-form input {
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    padding: 8px 10px;
+    background: #fff;
+    min-width: 150px;
+  }
+
+  .sales-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .kpi-card {
+    border: 1px solid #d7deeb;
+    border-radius: 12px;
+    padding: 16px;
+    background: #fff;
+    min-height: 104px;
+  }
+  .kpi-card.accent-green {
+    border-left: 4px solid #16a34a;
+  }
+  .kpi-card.accent-amber {
+    border-left: 4px solid #d97706;
+  }
+  .kpi-card.accent-blue {
+    border-left: 4px solid #2563eb;
+  }
+  .kpi-label {
+    margin: 0;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: #4b5563;
+  }
+  .kpi-value {
+    margin: 6px 0 2px;
+    font-size: 30px;
+    font-weight: 700;
+    color: #0f172a;
+    line-height: 1;
+  }
+  .kpi-sub {
+    margin: 0;
+    color: #475569;
+    font-size: 13px;
+  }
+
+  .sales-layout {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  .sales-card {
+    background: #fff;
+    border: 1px solid #dbe2ee;
+    border-radius: 12px;
+    padding: 14px;
+  }
+  .sales-card h3 {
+    margin: 0 0 10px;
+    font-size: 17px;
+  }
+
+  .sales-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .sales-table th,
+  .sales-table td {
+    padding: 8px;
+    border-bottom: 1px solid #edf1f7;
+    text-align: left;
+  }
+  .sales-table th {
+    color: #334155;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .status-chip {
+    display: inline-block;
+    border-radius: 999px;
+    padding: 4px 8px;
+    background: #f1f5f9;
+    font-size: 12px;
+    color: #334155;
+  }
+
+  .recommendation-list {
+    margin: 0;
+    padding-left: 18px;
+  }
+  .recommendation-list li {
+    margin-bottom: 8px;
+    color: #1f2937;
+  }
+
+  @media (max-width: 1280px) {
+    .sales-kpi-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    .sales-layout {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 760px) {
+    .sales-kpi-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="sales-header">
+  <div>
+    <h2 class="sales-title">Sales Insights Dashboard</h2>
+    <p class="sales-subtitle">Order intelligence derived from inventory order flow, customer behavior, and fulfillment signals.</p>
+  </div>
+</div>
+
+<div class="sales-filter-card">
+  <form method="get" id="sales-filter-form" class="sales-filter-form">
+    <div>
+      <label>Period</label>
+      <select name="period" onchange="document.getElementById('sales-filter-form').submit()">
+        <option value="7d" {% if filters.period == '7d' %}selected{% endif %}>Last 7 days</option>
+        <option value="30d" {% if filters.period == '30d' %}selected{% endif %}>Last 30 days</option>
+        <option value="90d" {% if filters.period == '90d' %}selected{% endif %}>Last 90 days</option>
+        <option value="365d" {% if filters.period == '365d' %}selected{% endif %}>Last 12 months</option>
+        <option value="all" {% if filters.period == 'all' %}selected{% endif %}>All time</option>
+      </select>
+    </div>
+    <div>
+      <label>From</label>
+      <input type="date" name="date_from" value="{{ filters.date_from }}" onchange="document.getElementById('sales-filter-form').submit()" />
+    </div>
+    <div>
+      <label>To</label>
+      <input type="date" name="date_to" value="{{ filters.date_to }}" onchange="document.getElementById('sales-filter-form').submit()" />
+    </div>
+    <div>
+      <button type="submit">Apply</button>
+    </div>
+    <div>
+      <a href="{% url 'sales-dashboard' %}">Reset</a>
+    </div>
+  </form>
+</div>
+
+<div class="sales-kpi-grid">
+  <div class="kpi-card accent-blue">
+    <p class="kpi-label">Total Orders</p>
+    <p class="kpi-value">{{ insights.total_orders }}</p>
+    <p class="kpi-sub">Orders in selected period</p>
+  </div>
+  <div class="kpi-card">
+    <p class="kpi-label">Orders Today</p>
+    <p class="kpi-value">{{ insights.orders_today }}</p>
+    <p class="kpi-sub">Current-day order volume</p>
+  </div>
+  <div class="kpi-card">
+    <p class="kpi-label">Orders This Month</p>
+    <p class="kpi-value">{{ insights.orders_this_month }}</p>
+    <p class="kpi-sub">Month-to-date</p>
+  </div>
+  <div class="kpi-card accent-blue">
+    <p class="kpi-label">Units Sold</p>
+    <p class="kpi-value">{{ insights.units_sold }}</p>
+    <p class="kpi-sub">Excl. cancelled lines</p>
+  </div>
+  <div class="kpi-card accent-green">
+    <p class="kpi-label">Known Revenue</p>
+    <p class="kpi-value">₹{{ insights.revenue_rupees|floatformat:2 }}</p>
+    <p class="kpi-sub">{{ insights.revenue_coverage_count }}/{{ insights.total_orders }} orders have price data</p>
+  </div>
+  <div class="kpi-card accent-green">
+    <p class="kpi-label">Avg Order Value</p>
+    <p class="kpi-value">₹{{ insights.aov_rupees|floatformat:2 }}</p>
+    <p class="kpi-sub">From orders with price data</p>
+  </div>
+  <div class="kpi-card accent-blue">
+    <p class="kpi-label">Unique Customers</p>
+    <p class="kpi-value">{{ insights.unique_customers }}</p>
+    <p class="kpi-sub">By email / Shopify ID / name</p>
+  </div>
+  <div class="kpi-card">
+    <p class="kpi-label">Recurring Customers</p>
+    <p class="kpi-value">{{ insights.recurring_customers }}</p>
+    <p class="kpi-sub">Repeat rate: {{ insights.recurring_rate }}%</p>
+  </div>
+  <div class="kpi-card {% if insights.return_exchange_rate >= 5 %}accent-amber{% endif %}">
+    <p class="kpi-label">Returns / Exchanges</p>
+    <p class="kpi-value">{{ insights.return_exchange_orders }}</p>
+    <p class="kpi-sub">Signal rate: {{ insights.return_exchange_rate }}%</p>
+  </div>
+  <div class="kpi-card {% if insights.cancelled_rate >= 10 %}accent-amber{% endif %}">
+    <p class="kpi-label">Cancelled Orders</p>
+    <p class="kpi-value">{{ insights.cancelled_orders }}</p>
+    <p class="kpi-sub">Cancellation rate: {{ insights.cancelled_rate }}%</p>
+  </div>
+</div>
+
+<div class="sales-layout">
+  <div class="sales-card">
+    <h3>Best-Selling Products</h3>
+    <table class="sales-table">
+      <thead>
+        <tr>
+          <th>Product</th>
+          <th>Units</th>
+          <th>Orders</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for product in top_products %}
+        <tr>
+          <td>{{ product.product_name|default:"Unnamed" }}</td>
+          <td>{{ product.units|default:0 }}</td>
+          <td>{{ product.orders|default:0 }}</td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="3">No product sales in selected period.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="sales-card">
+    <h3>Order Status Mix</h3>
+    <table class="sales-table">
+      <thead>
+        <tr>
+          <th>Status</th>
+          <th>Orders</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in status_breakdown %}
+        <tr>
+          <td><span class="status-chip">{{ item.status }}</span></td>
+          <td>{{ item.count }}</td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="2">No orders in selected period.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="sales-layout">
+  <div class="sales-card">
+    <h3>Daily Orders (Last 14 data points)</h3>
+    <table class="sales-table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Orders</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in daily_orders %}
+        <tr>
+          <td>{{ item.day|date:"d M Y" }}</td>
+          <td>{{ item.order_count }}</td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="2">No daily trend data available.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="sales-card">
+    <h3>Monthly Orders (Last 12 data points)</h3>
+    <table class="sales-table">
+      <thead>
+        <tr>
+          <th>Month</th>
+          <th>Orders</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in monthly_orders %}
+        <tr>
+          <td>{{ item.month|date:"M Y" }}</td>
+          <td>{{ item.order_count }}</td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="2">No monthly trend data available.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="sales-card">
+  <h3>Actionable Recommendations</h3>
+  <ul class="recommendation-list">
+    {% for recommendation in recommendations %}
+    <li>{{ recommendation }}</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endblock %}

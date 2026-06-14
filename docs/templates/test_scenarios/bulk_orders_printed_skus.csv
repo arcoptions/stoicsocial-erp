@@ -1,0 +1,4 @@
+design_name,variant,colour,size,on_hand,reserved,buffer_min,buffer_target,buffer_max,blank_fabric
+"Bulk Test Design",,Black,S,2,0,10,30,50,180 GSM
+"Bulk Test Design",,Black,M,1,0,10,30,50,180 GSM
+"Bulk Test Design",,Black,L,0,0,10,30,50,180 GSM

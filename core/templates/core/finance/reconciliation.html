@@ -1,0 +1,469 @@
+{% extends "base.html" %}
+
+{% block title %}Bank Reconciliation - BoldERP{% endblock %}
+
+{% block content %}
+<div class="reconciliation-page">
+    <div class="page-header">
+        <h1>🏦 Bank Reconciliation</h1>
+        <p class="subtitle">Upload bank statements and match transactions with expenses</p>
+    </div>
+
+    {% if not matched_data %}
+    <!-- Upload Section -->
+    <div class="upload-section">
+        <div class="upload-container">
+            <h2>Step 1: Upload Bank Statement</h2>
+            
+            <form method="post" enctype="multipart/form-data" class="upload-form">
+                {% csrf_token %}
+
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-icon">📤</div>
+                    <h3>Upload Bank Statement</h3>
+                    <p>Drag and drop your CSV or Excel file here, or click to browse</p>
+                    <input type="file" id="statement_file" name="bank_statement" accept=".csv,.xlsx,.xls" hidden>
+                    <button type="button" class="btn btn-secondary" onclick="document.getElementById('statement_file').click()">
+                        Select File
+                    </button>
+                </div>
+
+                <div id="fileInfo" style="display: none; margin-top: 15px;">
+                    <p><strong>Selected file:</strong> <span id="fileName"></span></p>
+                    <button type="submit" class="btn btn-primary">Upload & Match</button>
+                </div>
+
+                <div class="help-text">
+                    <h4>Supported Formats:</h4>
+                    <ul>
+                        <li>CSV files (.csv)</li>
+                        <li>Excel spreadsheets (.xlsx, .xls)</li>
+                    </ul>
+                    <p><strong>Required columns:</strong> Date, Description, Debit/Withdrawal, Credit/Deposit</p>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {% else %}
+    <!-- Matching Results Section -->
+    <div class="results-section">
+        <h2>Step 2: Review & Match Transactions</h2>
+        <p class="result-info">{{ transaction_count }} transactions found. Auto-matched transactions are marked below.</p>
+
+        <div class="results-container">
+            <div class="expense-status-grid" style="margin-bottom: 20px;">
+                <div class="status-box settled">
+                    <div class="status-count">{{ auto_reconciled_count }}</div>
+                    <div class="status-label">Auto-matched</div>
+                </div>
+                <div class="status-box pending">
+                    <div class="status-count">{{ needs_review_count }}</div>
+                    <div class="status-label">Needs review</div>
+                </div>
+            </div>
+            <table class="matching-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Description</th>
+                        <th>Amount</th>
+                        <th>Entity</th>
+                        <th>Person</th>
+                        <th>Confidence</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for txn in matched_data %}
+                    <tr class="confidence-{{ txn.match_confidence }}">
+                        <td>{{ txn.date }}</td>
+                        <td>{{ txn.description }}</td>
+                        <td class="amount">₹{{ txn.amount }}</td>
+                        <td>{{ txn.entity|default:"—" }}</td>
+                        <td>{{ txn.person|default:"—" }}</td>
+                        <td>
+                            <span class="confidence-badge confidence-{{ txn.match_confidence }}">
+                                {% if txn.match_confidence == 'auto_reconciled' %}
+                                    ✓ Auto-matched
+                                {% elif txn.match_confidence == 'needs_review' %}
+                                    ⚠ Review needed
+                                {% elif txn.match_confidence == 'manual_matched' %}
+                                    ✏ Manual
+                                {% endif %}
+                            </span>
+                        </td>
+                        <td>
+                            {% if txn.match_confidence == 'needs_review' %}
+                            <button class="link" onclick="reviewTransaction('{{ txn.id }}')">Review</button>
+                            {% else %}
+                            <span class="link-disabled">✓ Done</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <div class="action-footer">
+                <form method="post" action="{% url 'reconciliation' %}" class="settlement-form">
+                    {% csrf_token %}
+                    <input type="hidden" name="save_matches" value="true">
+                    <button type="submit" class="btn btn-primary btn-large">Save Matches & Settle</button>
+                    <a href="{% url 'reconciliation' %}" class="btn btn-secondary">Start Over</a>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    {% endif %}
+</div>
+
+<style>
+.reconciliation-page {
+    padding: 20px;
+    background: #f5f5f5;
+    min-height: calc(100vh - 100px);
+}
+
+.page-header {
+    margin-bottom: 30px;
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+}
+
+.page-header h1 {
+    margin: 0 0 5px 0;
+    font-size: 28px;
+    color: #1f2937;
+}
+
+.subtitle {
+    margin: 0;
+    color: #6b7280;
+    font-size: 14px;
+}
+
+.upload-section,
+.results-section {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.results-section {
+    margin-top: 20px;
+}
+
+.upload-container h2,
+.results-section h2 {
+    margin: 0 0 20px 0;
+    font-size: 20px;
+    color: #1f2937;
+}
+
+.result-info {
+    color: #6b7280;
+    margin: 0 0 20px 0;
+}
+
+.upload-area {
+    border: 2px dashed #d1d5db;
+    border-radius: 8px;
+    padding: 40px 20px;
+    text-align: center;
+    background: #fafafa;
+    transition: all 0.3s;
+}
+
+.upload-area:hover {
+    border-color: #2563eb;
+    background: #f0f7ff;
+}
+
+.upload-area.dragover {
+    border-color: #2563eb;
+    background: #eff6ff;
+}
+
+.upload-icon {
+    font-size: 48px;
+    margin-bottom: 15px;
+}
+
+.upload-area h3 {
+    margin: 0 0 10px 0;
+    font-size: 18px;
+    color: #1f2937;
+}
+
+.upload-area p {
+    margin: 0 0 15px 0;
+    color: #6b7280;
+}
+
+.help-text {
+    margin-top: 20px;
+    padding: 15px;
+    background: #f3f4f6;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+.help-text h4 {
+    margin: 0 0 10px 0;
+    font-weight: 600;
+    color: #374151;
+}
+
+.help-text ul {
+    margin: 0 0 10px 0;
+    padding-left: 20px;
+}
+
+.help-text li {
+    margin: 5px 0;
+    color: #6b7280;
+}
+
+.help-text p {
+    margin: 0;
+    color: #6b7280;
+}
+
+#fileInfo {
+    padding: 15px;
+    background: #ecfdf5;
+    border: 1px solid #d1e7dd;
+    border-radius: 4px;
+}
+
+#fileInfo p {
+    margin: 0 0 10px 0;
+    color: #166534;
+}
+
+.results-container {
+    overflow-x: auto;
+}
+
+.matching-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+}
+
+.matching-table thead {
+    background: #f3f4f6;
+    border-bottom: 2px solid #e5e7eb;
+}
+
+.matching-table th {
+    padding: 12px;
+    text-align: left;
+    font-weight: 600;
+    color: #374151;
+    font-size: 13px;
+}
+
+.matching-table td {
+    padding: 12px;
+    border-bottom: 1px solid #e5e7eb;
+    color: #374151;
+    font-size: 13px;
+}
+
+.matching-table tbody tr:hover {
+    background: #fafafa;
+}
+
+.matching-table .amount {
+    font-weight: 600;
+    text-align: right;
+}
+
+.confidence-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.confidence-auto_reconciled {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.confidence-needs_review {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.confidence-manual_matched {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+.link {
+    color: #2563eb;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    font-size: 13px;
+    text-decoration: none;
+}
+
+.link:hover {
+    text-decoration: underline;
+}
+
+.link-disabled {
+    color: #d1d5db;
+    font-size: 13px;
+}
+
+.action-footer {
+    padding: 20px 0 0 0;
+    border-top: 2px solid #e5e7eb;
+    display: flex;
+    gap: 10px;
+}
+
+.settlement-form {
+    display: flex;
+    gap: 10px;
+    width: 100%;
+}
+
+.btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 600;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 14px;
+}
+
+.btn-primary {
+    background: #2563eb;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #1d4ed8;
+}
+
+.btn-primary.btn-large {
+    padding: 12px 24px;
+    font-size: 15px;
+}
+
+.btn-secondary {
+    background: #e5e7eb;
+    color: #374151;
+}
+
+.btn-secondary:hover {
+    background: #d1d5db;
+}
+
+.alert {
+    padding: 15px;
+    border-radius: 4px;
+    margin-bottom: 20px;
+    border: 1px solid;
+}
+
+.alert-error {
+    background: #fee2e2;
+    border-color: #fecaca;
+    color: #991b1b;
+}
+
+.alert-error p {
+    margin: 0;
+}
+
+@media (max-width: 768px) {
+    .matching-table {
+        font-size: 12px;
+    }
+
+    .matching-table th,
+    .matching-table td {
+        padding: 8px;
+    }
+
+    .action-footer {
+        flex-direction: column;
+    }
+
+    .settlement-form {
+        flex-direction: column;
+    }
+
+    .btn {
+        width: 100%;
+    }
+}
+</style>
+
+<script>
+document.getElementById('uploadArea').addEventListener('click', function() {
+    document.getElementById('statement_file').click();
+});
+
+document.getElementById('statement_file').addEventListener('change', function(e) {
+    if (this.files.length > 0) {
+        document.getElementById('fileName').textContent = this.files[0].name;
+        document.getElementById('fileInfo').style.display = 'block';
+    }
+});
+
+// Drag and drop
+const uploadArea = document.getElementById('uploadArea');
+['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+    uploadArea.addEventListener(eventName, preventDefaults, false);
+});
+
+function preventDefaults(e) {
+    e.preventDefault();
+    e.stopPropagation();
+}
+
+['dragenter', 'dragover'].forEach(eventName => {
+    uploadArea.addEventListener(eventName, highlight, false);
+});
+
+['dragleave', 'drop'].forEach(eventName => {
+    uploadArea.addEventListener(eventName, unhighlight, false);
+});
+
+function highlight(e) {
+    uploadArea.classList.add('dragover');
+}
+
+function unhighlight(e) {
+    uploadArea.classList.remove('dragover');
+}
+
+uploadArea.addEventListener('drop', handleDrop, false);
+
+function handleDrop(e) {
+    const dt = e.dataTransfer;
+    const files = dt.files;
+    document.getElementById('statement_file').files = files;
+    
+    if (files.length > 0) {
+        document.getElementById('fileName').textContent = files[0].name;
+        document.getElementById('fileInfo').style.display = 'block';
+    }
+}
+</script>
+{% endblock %}

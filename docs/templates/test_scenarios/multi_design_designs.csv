@@ -1,0 +1,6 @@
+design_name,product_type,sub_category,material,fit,colour,colour_hex,blank_fabric,artwork_url,mockup_url,print_areas,placement_note
+"Design A - Pattern",Tshirt,Regular,Cotton,Regular,Black,#1b1b1b,180 GSM,https://example.com/design_a_black.png,https://example.com/design_a_mockup_black.png,Front,Center chest
+"Design A - Pattern",Tshirt,Regular,Cotton,Regular,White,#ffffff,180 GSM,https://example.com/design_a_white.png,https://example.com/design_a_mockup_white.png,Front,Center chest
+"Design B - Art",Tshirt,Regular,Cotton,Regular,Navy,#000080,180 GSM,https://example.com/design_b_navy.png,https://example.com/design_b_mockup_navy.png,Front,Center chest
+"Design B - Art",Tshirt,Regular,Cotton,Regular,Red,#ff0000,180 GSM,https://example.com/design_b_red.png,https://example.com/design_b_mockup_red.png,Front,Left sleeve
+"Design C - Quote",Tshirt,Regular,Cotton,Regular,Black,#1b1b1b,180 GSM,https://example.com/design_c_black.png,https://example.com/design_c_mockup_black.png,Front,Back

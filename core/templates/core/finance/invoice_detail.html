@@ -1,0 +1,553 @@
+{% extends "base.html" %}
+
+{% block title %}{{ invoice.invoice_number }} - BoldERP{% endblock %}
+
+{% block content %}
+<div class="invoice-detail-page">
+    <div class="invoice-header">
+        <div class="invoice-title">
+            <h1>{{ invoice.invoice_number }}</h1>
+            <span class="invoice-type">
+                {% if invoice.invoice_type == 'tax_invoice' %}
+                    📄 TAX INVOICE
+                {% elif invoice.invoice_type == 'proforma' %}
+                    📋 PROFORMA INVOICE
+                {% endif %}
+            </span>
+        </div>
+        <div class="invoice-actions">
+            <a href="{% url 'invoice-list' %}" class="btn btn-secondary">← Back</a>
+            {% if invoice.pdf_path %}
+            <a href="{{ invoice.pdf_path }}" class="btn btn-primary" download>📥 Download PDF</a>
+            {% else %}
+            <button class="btn btn-primary" onclick="generatePDF()">🖨️ Generate PDF</button>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="invoice-container">
+        <!-- Company Header -->
+        <div class="company-section">
+            <div class="company-info">
+                <h2>Bold & Italic</h2>
+                <p>c/o Stoic Social LLP</p>
+                <p>Hyderabad, Telangana, India</p>
+                <p>GSTIN: 36AFEFS7497C1ZM</p>
+                <p>PAN: AFEFS7497C</p>
+            </div>
+            <div class="invoice-dates">
+                <div>
+                    <strong>Invoice Date:</strong>
+                    <span>{{ invoice.invoice_date|date:"d M, Y" }}</span>
+                </div>
+                <div>
+                    <strong>Order Date:</strong>
+                    <span>{{ invoice.order_date|date:"d M, Y" }}</span>
+                </div>
+                <div>
+                    <strong>Place of Supply:</strong>
+                    <span>{{ invoice.place_of_supply|title }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Client & Invoice Details -->
+        <div class="details-section">
+            <div class="client-section">
+                <h3>Bill To</h3>
+                <p><strong>{{ invoice.client_name }}</strong></p>
+                <p>{{ invoice.client_address }}</p>
+                {% if invoice.client_gstin %}
+                <p>GSTIN: {{ invoice.client_gstin }}</p>
+                {% endif %}
+            </div>
+
+            <div class="invoice-meta">
+                <div class="meta-item">
+                    <span class="meta-label">Invoice Number:</span>
+                    <span class="meta-value">{{ invoice.invoice_number }}</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">Invoice Date:</span>
+                    <span class="meta-value">{{ invoice.invoice_date|date:"d M, Y" }}</span>
+                </div>
+                <div class="meta-item">
+                    <span class="meta-label">Invoice Type:</span>
+                    <span class="meta-value">
+                        {% if invoice.invoice_type == 'tax_invoice' %}Tax Invoice{% else %}Proforma{% endif %}
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Line Items Table -->
+        <div class="line-items-section">
+            <table class="invoice-items-table">
+                <thead>
+                    <tr>
+                        <th>Sl. No.</th>
+                        <th>Description of Services</th>
+                        <th>HSN/SAC</th>
+                        <th>Qty</th>
+                        <th>Rate (₹)</th>
+                        <th>Amount (₹)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in line_items %}
+                    <tr>
+                        <td>{{ item.sequence }}</td>
+                        <td>{{ item.description }}</td>
+                        <td>{{ item.hsn_sac }}</td>
+                        <td class="text-center">{{ item.quantity }}</td>
+                        <td class="text-right">{{ item.rate_rupees|floatformat:2 }}</td>
+                        <td class="text-right">{{ item.amount_rupees|floatformat:2 }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Totals Section -->
+        <div class="totals-section">
+            <div class="totals-left">
+                <h3>Notes:</h3>
+                <p>Thank you for your business. Payment terms as agreed.</p>
+            </div>
+
+            <div class="totals-right">
+                <div class="total-row">
+                    <span class="total-label">Subtotal:</span>
+                    <span class="total-value">₹{{ invoice.subtotal_rupees|floatformat:2 }}</span>
+                </div>
+
+                {% if invoice.discount_amount > 0 %}
+                <div class="total-row">
+                    <span class="total-label">Discount:</span>
+                    <span class="total-value">-₹{{ invoice.discount_rupees|floatformat:2 }}</span>
+                </div>
+                {% endif %}
+
+                {% if invoice.deductions_amount > 0 %}
+                <div class="total-row">
+                    <span class="total-label">Deductions:</span>
+                    <span class="total-value">-₹{{ invoice.deductions_rupees|floatformat:2 }}</span>
+                </div>
+                {% endif %}
+
+                <div class="total-row">
+                    <span class="total-label">Net Taxable Amount:</span>
+                    <span class="total-value">₹{{ invoice.net_taxable_rupees|floatformat:2 }}</span>
+                </div>
+
+                <div class="total-row">
+                    <span class="total-label">
+                        {% if invoice.place_of_supply == 'telangana' %}
+                            CGST (9%) + SGST (9%)
+                        {% else %}
+                            IGST (18%)
+                        {% endif %}
+                    </span>
+                    <span class="total-value">₹{{ invoice.tax_rupees|floatformat:2 }}</span>
+                </div>
+
+                <div class="total-row grand-total">
+                    <span class="total-label"><strong>Grand Total:</strong></span>
+                    <span class="total-value"><strong>₹{{ invoice.grand_total_rupees|floatformat:2 }}</strong></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bank & Signature -->
+        <div class="footer-section">
+            <div class="bank-details">
+                <h3>Bank Details</h3>
+                <p><strong>Bank:</strong> YES BANK</p>
+                <p><strong>Account:</strong> Stoic Social LLP (041363400009611)</p>
+                <p><strong>IFSC:</strong> YESB0000413</p>
+            </div>
+
+            <div class="signature">
+                <p>Authorized Signatory</p>
+                <p style="margin-top: 60px;">_______________________</p>
+                <p>Bold & Italic</p>
+            </div>
+        </div>
+
+        <!-- Audit Info -->
+        <div class="audit-section">
+            <p>
+                <small>Created: {{ invoice.created_at|date:"d M, Y H:i" }} | 
+                Updated: {{ invoice.updated_at|date:"d M, Y H:i" }} | 
+                Invoice ID: {{ invoice.id }}</small>
+            </p>
+        </div>
+    </div>
+</div>
+
+<style>
+.invoice-detail-page {
+    padding: 20px;
+    background: #f5f5f5;
+    min-height: calc(100vh - 100px);
+}
+
+.invoice-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.invoice-title {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.invoice-title h1 {
+    margin: 0;
+    font-size: 28px;
+    color: #1f2937;
+}
+
+.invoice-type {
+    background: #dbeafe;
+    color: #1e40af;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.invoice-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.btn {
+    padding: 10px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 600;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 14px;
+}
+
+.btn-primary {
+    background: #2563eb;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #1d4ed8;
+}
+
+.btn-secondary {
+    background: #e5e7eb;
+    color: #374151;
+}
+
+.btn-secondary:hover {
+    background: #d1d5db;
+}
+
+.invoice-container {
+    background: white;
+    padding: 40px;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+.company-section {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 40px;
+    padding-bottom: 20px;
+    border-bottom: 2px solid #e5e7eb;
+}
+
+.company-info h2 {
+    margin: 0 0 10px 0;
+    font-size: 20px;
+    font-weight: 700;
+    color: #1f2937;
+}
+
+.company-info p {
+    margin: 5px 0;
+    color: #6b7280;
+    font-size: 13px;
+}
+
+.invoice-dates {
+    text-align: right;
+}
+
+.invoice-dates div {
+    margin-bottom: 15px;
+}
+
+.invoice-dates strong {
+    color: #374151;
+    font-size: 13px;
+    display: block;
+}
+
+.invoice-dates span {
+    color: #6b7280;
+    font-size: 13px;
+}
+
+.details-section {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 40px;
+    margin-bottom: 40px;
+    padding-bottom: 20px;
+    border-bottom: 2px solid #e5e7eb;
+}
+
+.client-section h3 {
+    margin: 0 0 10px 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #374151;
+    text-transform: uppercase;
+}
+
+.client-section p {
+    margin: 3px 0;
+    color: #6b7280;
+    font-size: 13px;
+}
+
+.invoice-meta {
+    text-align: right;
+}
+
+.meta-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 30px;
+    margin-bottom: 10px;
+}
+
+.meta-label {
+    font-weight: 600;
+    color: #374151;
+    font-size: 13px;
+}
+
+.meta-value {
+    color: #6b7280;
+    font-size: 13px;
+}
+
+.line-items-section {
+    margin-bottom: 30px;
+}
+
+.invoice-items-table {
+    width: 100%;
+    border-collapse: collapse;
+    border: 1px solid #d1d5db;
+}
+
+.invoice-items-table thead {
+    background: #f3f4f6;
+    border-bottom: 2px solid #d1d5db;
+}
+
+.invoice-items-table th {
+    padding: 12px;
+    text-align: left;
+    font-weight: 600;
+    color: #374151;
+    font-size: 13px;
+}
+
+.invoice-items-table td {
+    padding: 12px;
+    border-bottom: 1px solid #e5e7eb;
+    color: #6b7280;
+    font-size: 13px;
+}
+
+.text-center {
+    text-align: center;
+}
+
+.text-right {
+    text-align: right;
+}
+
+.totals-section {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 40px;
+    margin-bottom: 40px;
+    padding: 20px 0;
+    border-bottom: 2px solid #e5e7eb;
+}
+
+.totals-left h3 {
+    margin: 0 0 10px 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #374151;
+}
+
+.totals-left p {
+    color: #6b7280;
+    font-size: 13px;
+    margin: 0;
+}
+
+.totals-right {
+    display: flex;
+    flex-direction: column;
+}
+
+.total-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    font-size: 13px;
+    border-bottom: 1px solid #f3f4f6;
+}
+
+.total-label {
+    color: #6b7280;
+}
+
+.total-value {
+    color: #1f2937;
+    font-weight: 600;
+    text-align: right;
+}
+
+.total-row.grand-total {
+    border-bottom: none;
+    border-top: 2px solid #d1d5db;
+    padding: 12px 0;
+    font-size: 16px;
+}
+
+.total-row.grand-total .total-label,
+.total-row.grand-total .total-value {
+    font-weight: 700;
+    color: #1f2937;
+}
+
+.footer-section {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 40px;
+    margin: 40px 0;
+    padding: 20px 0;
+    border-top: 2px solid #e5e7eb;
+}
+
+.bank-details h3 {
+    margin: 0 0 10px 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #374151;
+}
+
+.bank-details p {
+    margin: 5px 0;
+    color: #6b7280;
+    font-size: 13px;
+}
+
+.signature {
+    text-align: right;
+}
+
+.signature p {
+    margin: 0;
+    color: #6b7280;
+    font-size: 13px;
+}
+
+.audit-section {
+    text-align: center;
+    padding: 10px 0;
+    border-top: 1px solid #e5e7eb;
+    color: #9ca3af;
+    font-size: 11px;
+}
+
+@media print {
+    .invoice-header,
+    .invoice-detail-page {
+        background: white;
+    }
+
+    .btn {
+        display: none;
+    }
+
+    .invoice-container {
+        box-shadow: none;
+        max-width: 100%;
+    }
+}
+
+@media (max-width: 768px) {
+    .invoice-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 15px;
+    }
+
+    .invoice-container {
+        padding: 20px;
+    }
+
+    .company-section {
+        flex-direction: column;
+    }
+
+    .invoice-dates {
+        text-align: left;
+        margin-top: 15px;
+    }
+
+    .details-section {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+
+    .invoice-meta {
+        text-align: left;
+    }
+
+    .totals-section {
+        grid-template-columns: 1fr;
+    }
+
+    .footer-section {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+}
+</style>
+
+<script>
+function generatePDF() {
+    alert('PDF generation coming soon! Invoice data is ready for export.');
+    // TODO: Implement PDF generation via ReportLab
+}
+</script>
+{% endblock %}

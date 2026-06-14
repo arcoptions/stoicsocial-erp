@@ -5,7 +5,6 @@ from typing import Any
 
 import requests
 from django.core.management.base import BaseCommand, CommandError
-from django.db import transaction
 
 from core.services.shopify import ingest_order
 
@@ -41,7 +40,6 @@ class Command(BaseCommand):
             help="Fetch and count only; do not write to DB.",
         )
 
-    @transaction.atomic
     def handle(self, *args: Any, **options: Any) -> None:
         """Fetch Shopify orders page-by-page and upsert them via ingest_order."""
         shop_domain: str = str(options["shop_domain"]).strip()
@@ -102,7 +100,7 @@ class Command(BaseCommand):
 
             if not dry_run:
                 for order in orders:
-                    ingest_order(order)
+                    ingest_order(order, apply_inventory_side_effects=False)
                     total_upserted += 1
 
             link_header = response.headers.get("Link", "")

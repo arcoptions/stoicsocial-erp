@@ -1,0 +1,3 @@
+design_name,variant,colour,size,on_hand,reserved,buffer_min,buffer_target,buffer_max,blank_fabric
+"Status Test Design",,Black,S,20,0,3,10,20,180 GSM
+"Status Test Design",,Black,M,20,0,3,10,20,180 GSM

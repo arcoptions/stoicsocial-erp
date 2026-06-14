@@ -1,0 +1,301 @@
+{% extends "base.html" %}
+
+{% block title %}Invoices - BoldERP{% endblock %}
+
+{% block content %}
+<div class="invoice-page">
+    <div class="page-header">
+        <h1>🧾 Invoices</h1>
+        <a href="{% url 'invoice-create' %}" class="btn btn-primary">+ Create Invoice</a>
+    </div>
+
+    <!-- Filters -->
+    <div class="filters-section">
+        <form method="get" class="filter-form">
+            <select name="invoice_type" id="invoice_type">
+                <option value="">All Types</option>
+                <option value="tax_invoice" {% if request.GET.invoice_type == 'tax_invoice' %}selected{% endif %}>Tax Invoice</option>
+                <option value="proforma" {% if request.GET.invoice_type == 'proforma' %}selected{% endif %}>Proforma Invoice</option>
+            </select>
+
+            <select name="place_of_supply" id="place_of_supply">
+                <option value="">All States</option>
+                <option value="telangana" {% if request.GET.place_of_supply == 'telangana' %}selected{% endif %}>Telangana</option>
+                <option value="karnataka" {% if request.GET.place_of_supply == 'karnataka' %}selected{% endif %}>Karnataka</option>
+                <option value="maharashtra" {% if request.GET.place_of_supply == 'maharashtra' %}selected{% endif %}>Maharashtra</option>
+                <option value="delhi" {% if request.GET.place_of_supply == 'delhi' %}selected{% endif %}>Delhi</option>
+            </select>
+
+            <button type="submit" class="btn btn-secondary">Filter</button>
+        </form>
+    </div>
+
+    <!-- Invoice Table -->
+    {% if invoices %}
+    <div class="table-container">
+        <table class="invoice-table">
+            <thead>
+                <tr>
+                    <th>Invoice No.</th>
+                    <th>Date</th>
+                    <th>Client</th>
+                    <th>Type</th>
+                    <th>Place of Supply</th>
+                    <th>Amount</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for invoice in invoices %}
+                <tr>
+                    <td><strong>{{ invoice.invoice_number }}</strong></td>
+                    <td>{{ invoice.invoice_date|date:"M d, Y" }}</td>
+                    <td>{{ invoice.client_name }}</td>
+                    <td>
+                        <span class="type-badge type-{{ invoice.invoice_type }}">
+                            {% if invoice.invoice_type == 'tax_invoice' %}
+                                📄 Tax Invoice
+                            {% elif invoice.invoice_type == 'proforma' %}
+                                📋 Proforma
+                            {% endif %}
+                        </span>
+                    </td>
+                    <td>{{ invoice.place_of_supply|title }}</td>
+                    <td class="amount">₹{{ invoice.grand_total_rupees|floatformat:2 }}</td>
+                    <td>
+                        {% if invoice.pdf_generated_at %}
+                        <span class="status-badge status-ready">✓ Ready</span>
+                        {% else %}
+                        <span class="status-badge status-pending">⏳ Pending</span>
+                        {% endif %}
+                    </td>
+                    <td class="actions">
+                        <a href="{% url 'invoice-detail' invoice.id %}" class="link">View</a>
+                        {% if invoice.pdf_path %}
+                        | <a href="{{ invoice.pdf_path }}" class="link" download>Download</a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-icon">📋</div>
+        <h3>No Invoices Found</h3>
+        <p>Create your first invoice to get started.</p>
+        <a href="{% url 'invoice-create' %}" class="btn btn-primary">Create Invoice</a>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.invoice-page {
+    padding: 20px;
+    background: #f5f5f5;
+    min-height: calc(100vh - 100px);
+}
+
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+}
+
+.page-header h1 {
+    margin: 0;
+    font-size: 24px;
+}
+
+.filters-section {
+    background: white;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.filter-form {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.filter-form select {
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: white;
+    cursor: pointer;
+}
+
+.btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 600;
+    text-decoration: none;
+    display: inline-block;
+}
+
+.btn-primary {
+    background: #2563eb;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #1d4ed8;
+}
+
+.btn-secondary {
+    background: #6b7280;
+    color: white;
+}
+
+.table-container {
+    background: white;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.invoice-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.invoice-table thead {
+    background: #f3f4f6;
+    border-bottom: 2px solid #e5e7eb;
+}
+
+.invoice-table th {
+    padding: 12px;
+    text-align: left;
+    font-weight: 600;
+    color: #1f2937;
+    font-size: 14px;
+}
+
+.invoice-table td {
+    padding: 12px;
+    border-bottom: 1px solid #e5e7eb;
+    color: #374151;
+}
+
+.invoice-table tbody tr:hover {
+    background: #fafafa;
+}
+
+.invoice-table .amount {
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.type-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.type-badge.type-tax_invoice {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+.type-badge.type-proforma {
+    background: #e0e7ff;
+    color: #3730a3;
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.status-badge.status-ready {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.status-badge.status-pending {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.actions {
+    font-size: 13px;
+}
+
+.link {
+    color: #2563eb;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.link:hover {
+    text-decoration: underline;
+}
+
+.empty-state {
+    background: white;
+    padding: 60px 20px;
+    border-radius: 8px;
+    text-align: center;
+}
+
+.empty-icon {
+    font-size: 48px;
+    margin-bottom: 20px;
+}
+
+.empty-state h3 {
+    margin: 0 0 10px 0;
+    color: #1f2937;
+}
+
+.empty-state p {
+    color: #6b7280;
+    margin-bottom: 20px;
+}
+
+@media (max-width: 768px) {
+    .page-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 15px;
+    }
+
+    .filter-form {
+        flex-direction: column;
+    }
+
+    .filter-form select,
+    .filter-form button {
+        width: 100%;
+    }
+
+    .invoice-table {
+        font-size: 12px;
+    }
+
+    .invoice-table th,
+    .invoice-table td {
+        padding: 8px;
+    }
+}
+</style>
+{% endblock %}

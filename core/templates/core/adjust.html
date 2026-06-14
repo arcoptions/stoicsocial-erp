@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Adjust Inventory | BoldERP{% endblock %}
+
+{% block content %}
+<div class="card">
+  <h2>Manual Inventory Adjustment</h2>
+  <p class="muted">Apply a stock correction (positive or negative). Every change is logged with a reason for full traceability.</p>
+
+  <form method="post" style="max-width:520px;">
+    {% csrf_token %}
+
+    <label style="display:block;font-weight:600;margin-bottom:6px;">Pool</label>
+    <select name="pool" required id="pool-select" onchange="updateSkuList()" style="width:100%;margin-bottom:14px;">
+      <option value="">Select pool…</option>
+      <option value="plain">Plain Blanks</option>
+      <option value="printed">Printed Stock</option>
+    </select>
+
+    <label style="display:block;font-weight:600;margin-bottom:6px;">SKU</label>
+    <select name="sku_id" required id="sku-select" style="width:100%;margin-bottom:14px;">
+      <option value="">Select pool first…</option>
+    </select>
+
+    <label style="display:block;font-weight:600;margin-bottom:6px;">Delta (+ to add, − to remove)</label>
+    <input type="number" name="delta" required placeholder="e.g. +10 or -3" style="width:100%;margin-bottom:14px;" />
+
+    <label style="display:block;font-weight:600;margin-bottom:6px;">Reason</label>
+    <select name="reason" required style="width:100%;margin-bottom:14px;">
+      <option value="">Select reason…</option>
+      {% for val, label in reasons %}
+        <option value="{{ val }}">{{ label }}</option>
+      {% endfor %}
+    </select>
+
+    <label style="display:block;font-weight:600;margin-bottom:6px;">Note (optional)</label>
+    <textarea name="note" rows="3" placeholder="Additional context for the audit trail…" style="width:100%;margin-bottom:20px;"></textarea>
+
+    <button type="submit">Apply Adjustment</button>
+  </form>
+</div>
+
+<script>
+const blankSkus = [
+  {% for sku in blank_skus %}
+  { id: "{{ sku.id }}", label: "{{ sku.fabric }} / {{ sku.colour }} / {{ sku.size }} (on-hand: {{ sku.on_hand }})" },
+  {% endfor %}
+];
+const printedSkus = [
+  {% for sku in printed_skus %}
+  { id: "{{ sku.id }}", label: "{{ sku.design.name }} / {{ sku.variant|default:'BASE' }} / {{ sku.colour }} / {{ sku.size|default:'NA' }} (on-hand: {{ sku.on_hand }})" },
+  {% endfor %}
+];
+
+function updateSkuList() {
+  const pool = document.getElementById("pool-select").value;
+  const select = document.getElementById("sku-select");
+  const skus = pool === "plain" ? blankSkus : pool === "printed" ? printedSkus : [];
+  select.innerHTML = '<option value="">Select SKU…</option>';
+  skus.forEach(s => {
+    const opt = document.createElement("option");
+    opt.value = s.id;
+    opt.textContent = s.label;
+    select.appendChild(opt);
+  });
+}
+</script>
+{% endblock %}

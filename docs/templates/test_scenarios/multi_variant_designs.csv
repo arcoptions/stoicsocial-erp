@@ -1,0 +1,4 @@
+design_name,product_type,sub_category,material,fit,colour,colour_hex,blank_fabric,artwork_url,mockup_url,print_areas,placement_note
+"Raasi Phalalu",Tshirt,Regular,Cotton,Regular,Black,#1b1b1b,180 GSM,https://example.com/raasi_black.png,https://example.com/raasi_mockup_black.png,Front,Center chest
+"Raasi Phalalu",Tshirt,Regular,Cotton,Regular,White,#ffffff,180 GSM,https://example.com/raasi_white.png,https://example.com/raasi_mockup_white.png,Front,Center chest
+"Raasi Phalalu",Tshirt,Regular,Cotton,Regular,Navy,#000080,180 GSM,https://example.com/raasi_navy.png,https://example.com/raasi_mockup_navy.png,Front,Center chest

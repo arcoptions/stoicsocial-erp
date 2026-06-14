@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Receive | BoldERP{% endblock %}
+
+{% block content %}
+<div class="card">
+  <h2>Receive Dashboard</h2>
+  <p class="muted">Enter received quantities for each print job line. Orders flip to Ready to Ship automatically.</p>
+</div>
+
+{% if job_cards %}
+  {% for card in job_cards %}
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
+      <div>
+        <h3 style="margin:0 0 4px;">Job {{ card.job.id|stringformat:"s"|slice:":8" }}… — {{ card.job.vendor.name }}</h3>
+        <p class="muted" style="margin:0;">
+          Sent: {{ card.job.sent_at|date:"d M Y"|default:"—" }} &nbsp;|&nbsp;
+          Status: <strong>{{ card.job.get_status_display }}</strong>
+          {% if card.job.batch %} &nbsp;|&nbsp; Batch: {{ card.job.batch.id|stringformat:"s"|slice:":8" }}…{% endif %}
+        </p>
+      </div>
+    </div>
+
+    <div style="overflow-x:auto;margin-top:12px;">
+      <table>
+        <thead>
+          <tr>
+            <th>Design</th>
+            <th>Variant</th>
+            <th>Colour</th>
+            <th>Blank Stock</th>
+            {% for size in card.sizes %}
+            <th>{{ size }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in card.rows %}
+          <tr>
+            <td>{{ row.design_name }}</td>
+            <td>{{ row.variant }}</td>
+            <td>{{ row.colour }}</td>
+            <td>
+              {% if row.blank_summary %}
+                {{ row.blank_summary|join:", " }}
+              {% else %}
+                <span class="muted">—</span>
+              {% endif %}
+            </td>
+            {% for line in row.size_cells %}
+            <td>
+              {% if line %}
+                <div style="min-width:170px;font-size:12px;">
+                  Sent: <strong>{{ line.qty_sent }}</strong><br>
+                  Good: {{ line.qty_received_good }}<br>
+                  Def: {{ line.qty_received_defective }}<br>
+                  {% if line.qty_received_good == 0 and line.qty_received_defective == 0 %}
+                  <form method="post" action="{% url 'receive-line' line.id %}" style="display:flex;gap:4px;align-items:center;margin-top:6px;flex-wrap:wrap;">
+                    {% csrf_token %}
+                    <input type="number" name="qty_good" value="{{ line.qty_sent }}" min="0" max="{{ line.qty_sent }}" style="width:56px;padding:4px;font-size:12px;" placeholder="Good" />
+                    <input type="number" name="qty_defective" value="0" min="0" max="{{ line.qty_sent }}" style="width:56px;padding:4px;font-size:12px;" placeholder="Def" />
+                    <button type="submit" style="padding:4px 8px;font-size:12px;">Save</button>
+                  </form>
+                  {% else %}
+                  <span style="color:#15803d;font-weight:600;">Received</span>
+                  {% endif %}
+                </div>
+              {% else %}
+                <span class="muted">—</span>
+              {% endif %}
+            </td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endfor %}
+{% else %}
+<div class="card" style="text-align:center;color:#6b7280;padding:40px;">
+  No print jobs are currently pending receive.<br>
+  <a href="{% url 'print-batch-suggest' %}" style="display:inline-block;margin-top:12px;">Go to Print Batches →</a>
+</div>
+{% endif %}
+{% endblock %}
