@@ -367,10 +367,10 @@
 
     <div class="bi-sidebar-modules">
       {% if can_inventory %}
-      <button class="bi-module-tab{% if '/ops/inventory/' in request.path or '/ops/orders/' in request.path or '/ops/print-batches/' in request.path or '/ops/receive/' in request.path or '/ops/forecast/' in request.path or '/ops/audit-log/' in request.path or '/ops/inventory/skus/' in request.path %} active{% endif %}" onclick="toggleModule('inventory', event)" data-module="inventory">
+      <button class="bi-module-tab{% if '/ops/inventory/' in request.path or '/ops/orders/' in request.path or '/ops/print-batches/' in request.path or '/ops/receive/' in request.path or '/ops/forecast/' in request.path or '/ops/audit-log/' in request.path or '/ops/inventory/skus/' in request.path or '/ops/inventory/import/' in request.path %} active{% endif %}" onclick="toggleModule('inventory', event)" data-module="inventory">
         📦 Inventory
       </button>
-      <div id="inventory-links" class="bi-module-links{% if '/ops/inventory/' in request.path or '/ops/orders/' in request.path or '/ops/print-batches/' in request.path or '/ops/receive/' in request.path or '/ops/forecast/' in request.path or '/ops/audit-log/' in request.path or '/ops/inventory/skus/' in request.path %} open{% endif %}">
+      <div id="inventory-links" class="bi-module-links{% if '/ops/inventory/' in request.path or '/ops/orders/' in request.path or '/ops/print-batches/' in request.path or '/ops/receive/' in request.path or '/ops/forecast/' in request.path or '/ops/audit-log/' in request.path or '/ops/inventory/skus/' in request.path or '/ops/inventory/import/' in request.path %} open{% endif %}">
         <a href="{% url 'order-list' %}" class="bi-module-link{% if '/ops/inventory/orders/' in request.path or '/ops/orders/' in request.path %} active{% endif %}">Orders</a>
         <a href="{% url 'sku-manager' %}" class="bi-module-link{% if '/ops/inventory/skus/' in request.path %} active{% endif %}">Adjust Stock</a>
         <a href="{% url 'print-batch-suggest' %}" class="bi-module-link{% if '/ops/inventory/print-batches/' in request.path or '/ops/print-batches/' in request.path %} active{% endif %}">Print Batches</a>
@@ -380,6 +380,7 @@
         <a href="{% url 'audit-log' %}" class="bi-module-link{% if '/ops/inventory/audit-log/' in request.path or '/ops/audit-log/' in request.path %} active{% endif %}">Audit Log</a>
         <a href="{% url 'vendor-list' %}" class="bi-module-link{% if '/ops/inventory/vendors/' in request.path %} active{% endif %}">Vendors</a>
         <a href="{% url 'webhook-event-log' %}" class="bi-module-link{% if '/ops/inventory/webhook-events/' in request.path %} active{% endif %}">Webhook Events</a>
+        <a href="{% url 'import-test-data' %}" class="bi-module-link{% if '/ops/inventory/import/' in request.path %} active{% endif %}">Import Data</a>
       </div>
       {% endif %}
 
