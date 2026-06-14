@@ -383,8 +383,8 @@ def ingest_shopify_webhook(topic: str, idempotency_key: str, payload: dict[str, 
 
 @csrf_exempt
 def shopify_webhook(request: HttpRequest) -> HttpResponse:
-    """Accept Shopify webhooks and process through Django-Q2 (async) or synchronously as fallback."""
-    from core.tasks import enqueue_shopify_webhook, process_shopify_webhook
+    """Accept Shopify webhooks and process synchronously (Django-Q2 worker optional)."""
+    from core.tasks import process_shopify_webhook
 
     if request.method != "POST":
         return HttpResponse(status=405)
@@ -402,17 +402,13 @@ def shopify_webhook(request: HttpRequest) -> HttpResponse:
         if not _extract_order_identifier_for_topic(topic, payload):
             return JsonResponse({"detail": "Missing Shopify order id"}, status=400)
     
-    # Try async queueing via Django-Q2; fall back to sync if not available
+    # Process webhook synchronously to ensure orders are persisted immediately.
+    # Note: For high-volume scenarios, deploy a Django-Q worker and switch to async_task.
     try:
-        enqueue_shopify_webhook(topic, webhook_id, payload)
-        return JsonResponse({"queued": True}, status=202)
-    except Exception:
-        # Worker not available; process synchronously
-        try:
-            process_shopify_webhook(topic, webhook_id, payload)
-            return JsonResponse({"processed": True}, status=200)
-        except Exception as exc:
-            return JsonResponse({"detail": str(exc)}, status=500)
+        event_id = process_shopify_webhook(topic, webhook_id, payload)
+        return JsonResponse({"processed": True, "event_id": event_id}, status=200)
+    except Exception as exc:
+        return JsonResponse({"detail": str(exc)}, status=500)
 
 
 def verify_shopify_hmac(raw_body: bytes, provided_hmac: str) -> bool:
