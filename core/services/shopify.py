@@ -94,6 +94,9 @@ def _extract_variant_and_size(raw_variant: str | None, raw_size: str | None) -> 
     if not variant:
         return None, None
 
+    if _has_valid_size(variant):
+        return None, variant
+
     parts = [part.strip() for part in variant.split("/") if part.strip()]
     if len(parts) >= 2:
         maybe_size = parts[-1].upper()
