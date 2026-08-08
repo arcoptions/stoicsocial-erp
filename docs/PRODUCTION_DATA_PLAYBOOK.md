@@ -40,6 +40,12 @@ What it does:
 - Seeds sample orders and a sample print job.
 - Generates a print pack URL for immediate validation.
 
+For a clean production start with no sample data, preserve users and roles while clearing all business tables:
+
+```bash
+python manage.py reset_and_seed_domain_data --yes --empty
+```
+
 ## 4. Production-Ready CSV Import
 
 After filling templates, run:

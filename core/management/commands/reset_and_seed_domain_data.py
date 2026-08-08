@@ -43,7 +43,7 @@ class SeedLine:
 
 
 class Command(BaseCommand):
-    help = "Delete all core operational data and seed a consistent sample baseline."
+    help = "Delete all core operational data, optionally leaving the database empty."
 
     def add_arguments(self, parser) -> None:
         parser.add_argument(
@@ -56,6 +56,11 @@ class Command(BaseCommand):
             action="store_true",
             help="Generate sample print pack at the end (slower due remote image fetch).",
         )
+        parser.add_argument(
+            "--empty",
+            action="store_true",
+            help="Leave core business tables empty instead of seeding sample data.",
+        )
 
     @transaction.atomic
     def handle(self, *args, **options) -> None:
@@ -65,6 +70,10 @@ class Command(BaseCommand):
         self.stdout.write(self.style.WARNING("Starting full data reset..."))
         self._reset_all_data()
         self.stdout.write(self.style.SUCCESS("All existing core data deleted."))
+
+        if options["empty"]:
+            self.stdout.write(self.style.SUCCESS("Empty business-data reset complete."))
+            return
 
         self.stdout.write(self.style.WARNING("Seeding consistent sample dataset..."))
         print_job = self._seed_sample_data()
