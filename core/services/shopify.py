@@ -16,7 +16,7 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
-from core.models import Order, OrderLine, PrintedSKU, WebhookEvent
+from core.models import BlankSKU, Order, OrderLine, PrintedSKU, WebhookEvent
 from core.services import inventory
 
 
@@ -173,7 +173,65 @@ def _resolve_printed_sku(item: dict[str, Any]) -> PrintedSKU | None:
             continue
         return candidate
 
-    return None
+    family_query = query
+    if colour:
+        family_query = family_query.filter(colour__iexact=colour)
+    all_family_candidates = list(family_query)
+    exact_design_candidates = [
+        candidate for candidate in all_family_candidates if candidate.design.name == design_name
+    ]
+    design_candidates = exact_design_candidates or [
+        candidate
+        for candidate in all_family_candidates
+        if _canonical_text(candidate.design.name) == canonical_design
+    ]
+    family_candidates = [
+        candidate
+        for candidate in design_candidates
+        if (
+            _canonical_text(candidate.variant) in {"", canonical_variant}
+            if canonical_variant
+            else not candidate.variant
+        )
+    ]
+    family_keys = {
+        (str(candidate.design_id), candidate.variant or "", candidate.colour.lower())
+        for candidate in family_candidates
+    }
+    if len(family_keys) != 1:
+        return None
+
+    template = family_candidates[0]
+    blank_fabric = ""
+    if template.blank_sku_id:
+        blank_fabric = template.blank_sku.fabric
+    else:
+        asset = template.design.assets.filter(colour__iexact=template.colour).first()
+        if asset is not None:
+            blank_fabric = asset.blank_fabric
+    matching_blank = None
+    if blank_fabric:
+        matching_blank = BlankSKU.objects.filter(
+            fabric__iexact=blank_fabric,
+            colour__iexact=template.colour,
+            size__iexact=canonical_size,
+        ).first()
+
+    aligned_sku, _ = PrintedSKU.objects.get_or_create(
+        design=template.design,
+        variant=template.variant,
+        colour=template.colour,
+        size=canonical_size,
+        defaults={
+            "blank_sku": matching_blank,
+            "on_hand": 0,
+            "reserved": 0,
+            "buffer_min": template.buffer_min,
+            "buffer_target": template.buffer_target,
+            "buffer_max": template.buffer_max,
+        },
+    )
+    return aligned_sku
 
 
 def _line_status_for_item(printed_sku: PrintedSKU | None, quantity: int) -> str:
