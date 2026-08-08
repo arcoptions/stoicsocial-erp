@@ -7,7 +7,7 @@ Usage:
     python test_webhook_delivery.py --url http://localhost:8000/webhooks/shopify/ --secret <local-secret>
     
     # Test Railway deployment
-    python test_webhook_delivery.py --url https://stoicsocial-web-production.up.railway.app/webhooks/shopify/ --secret <shopify-secret>
+    python test_webhook_delivery.py --url https://erp.boldanditalic.in/webhooks/shopify/ --secret <shopify-secret>
 """
 
 import json

@@ -24,7 +24,7 @@
    - Topic: **Orders → Fulfilled** (optional, for fulfillment tracking)
 
 3. For each webhook, enter:
-   - **URL**: `https://stoicsocial-web-production.up.railway.app/webhooks/shopify/`
+   - **URL**: `https://erp.boldanditalic.in/webhooks/shopify/`
    - **Format**: JSON
 
 4. Copy the **Webhook endpoint signing secret** from the webhook details (used for HMAC verification)

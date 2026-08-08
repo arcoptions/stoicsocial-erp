@@ -58,10 +58,10 @@
 
 | Topic | URL |
 |-------|-----|
-| Orders → Created | `https://stoicsocial-web-production.up.railway.app/webhooks/shopify/` |
-| Orders → Updated | `https://stoicsocial-web-production.up.railway.app/webhooks/shopify/` |
-| Orders → Cancelled | `https://stoicsocial-web-production.up.railway.app/webhooks/shopify/` |
-| Orders → Fulfilled *(optional)* | `https://stoicsocial-web-production.up.railway.app/webhooks/shopify/` |
+| Orders → Created | `https://erp.boldanditalic.in/webhooks/shopify/` |
+| Orders → Updated | `https://erp.boldanditalic.in/webhooks/shopify/` |
+| Orders → Cancelled | `https://erp.boldanditalic.in/webhooks/shopify/` |
+| Orders → Fulfilled *(optional)* | `https://erp.boldanditalic.in/webhooks/shopify/` |
 
 3. **Copy the signing secret** from any webhook (all use the same secret)
 
@@ -91,7 +91,7 @@ python test_webhook_delivery.py \
 
 # Test Railway deployment
 python test_webhook_delivery.py \
-  --url https://stoicsocial-web-production.up.railway.app/webhooks/shopify/ \
+   --url https://erp.boldanditalic.in/webhooks/shopify/ \
   --secret "your-shopify-signing-secret" \
   --skip-verify
 ```
