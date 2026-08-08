@@ -479,6 +479,25 @@ def confirm_batch(request: HttpRequest) -> HttpResponse:
         return redirect("print-batch-suggest")
 
     with transaction.atomic():
+        required_by_blank_sku: dict[str, int] = {}
+        for row, qty in selected:
+            blank_sku_id = str(row.blank_sku.id)
+            required_by_blank_sku[blank_sku_id] = required_by_blank_sku.get(blank_sku_id, 0) + qty
+
+        locked_blank_skus = {
+            str(blank_sku.id): blank_sku
+            for blank_sku in BlankSKU.objects.select_for_update().filter(id__in=required_by_blank_sku)
+        }
+        for blank_sku_id, required_qty in required_by_blank_sku.items():
+            blank_sku = locked_blank_skus[blank_sku_id]
+            if required_qty > blank_sku.available:
+                messages.error(
+                    request,
+                    f"Insufficient plain stock for {blank_sku}. "
+                    f"Requested {required_qty} across selected lines, available {blank_sku.available}.",
+                )
+                return redirect("print-batch-suggest")
+
         print_job = PrintJob.objects.create(
             vendor=vendor,
             status=PrintJob.STATUS_SENT,
