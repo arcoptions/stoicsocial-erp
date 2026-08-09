@@ -7,7 +7,7 @@ from typing import Any
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
-from core.models import BlankSKU, Design, DesignAsset, Order, OrderLine, PrintedSKU
+from core.models import BlankSKU, Design, DesignAsset, Order, OrderLine, PrintedSKU, Vendor
 
 
 ORDER_STATUS_MAP: dict[str, str] = {
@@ -57,23 +57,26 @@ class Command(BaseCommand):
         blank_skus_csv = bundle_dir / "blank_skus.csv"
         printed_skus_csv = bundle_dir / "printed_skus.csv"
         orders_csv = bundle_dir / "orders.csv"
+        vendors_csv = bundle_dir / "vendors.csv"
 
-        for file_path in [designs_csv, blank_skus_csv, printed_skus_csv, orders_csv]:
+        for file_path in [designs_csv, blank_skus_csv, printed_skus_csv]:
             if not file_path.exists():
                 raise CommandError(f"Missing required file: {file_path}")
 
         designs_rows = self._read_csv(designs_csv)
         blank_rows = self._read_csv(blank_skus_csv)
         printed_rows = self._read_csv(printed_skus_csv)
-        order_rows = self._read_csv(orders_csv)
+        order_rows = self._read_csv(orders_csv) if orders_csv.exists() else []
+        vendor_rows = self._read_csv(vendors_csv) if vendors_csv.exists() else []
 
         self.stdout.write(self.style.HTTP_INFO("CSV bundle parsed successfully:"))
         self.stdout.write(f"- designs.csv rows: {len(designs_rows)}")
         self.stdout.write(f"- blank_skus.csv rows: {len(blank_rows)}")
         self.stdout.write(f"- printed_skus.csv rows: {len(printed_rows)}")
         self.stdout.write(f"- orders.csv rows: {len(order_rows)}")
+        self.stdout.write(f"- vendors.csv rows: {len(vendor_rows)}")
 
-        self._validate_rows(designs_rows, blank_rows, printed_rows, order_rows)
+        self._validate_rows(designs_rows, blank_rows, printed_rows, order_rows, vendor_rows)
 
         if dry_run:
             self.stdout.write(self.style.WARNING("Dry run complete. No database changes applied."))
@@ -83,6 +86,7 @@ class Command(BaseCommand):
         self._import_blank_skus(blank_rows)
         self._import_printed_skus(printed_rows)
         self._import_orders(order_rows)
+        self._import_vendors(vendor_rows)
 
         self.stdout.write(self.style.SUCCESS("Production CSV import completed."))
 
@@ -105,6 +109,7 @@ class Command(BaseCommand):
         blank_rows: list[dict[str, str]],
         printed_rows: list[dict[str, str]],
         order_rows: list[dict[str, str]],
+        vendor_rows: list[dict[str, str]],
     ) -> None:
         """Validate required fields and status values before writing."""
         for index, row in enumerate(designs_rows, start=2):
@@ -127,6 +132,10 @@ class Command(BaseCommand):
             status_value = (row.get("status") or "needs_printing").strip().lower()
             if status_value not in ORDER_STATUS_MAP:
                 raise CommandError(f"orders.csv row {index}: unsupported status '{status_value}'")
+
+        for index, row in enumerate(vendor_rows, start=2):
+            if not row.get("name"):
+                raise CommandError(f"vendors.csv row {index}: name is required")
 
     def _normalize_size(self, value: str) -> str:
         """Normalize size labels to canonical internal values."""
@@ -287,5 +296,17 @@ class Command(BaseCommand):
                     "is_bundle": False,
                     "bundle_components": [],
                     "status": line_status,
+                },
+            )
+
+    def _import_vendors(self, rows: list[dict[str, str]]) -> None:
+        """Upsert print vendors from the optional vendors.csv file."""
+        for row in rows:
+            is_active = (row.get("is_active") or "true").strip().lower() in {"1", "true", "yes", "y"}
+            Vendor.objects.update_or_create(
+                name=row["name"],
+                defaults={
+                    "contact": row.get("contact") or "",
+                    "is_active": is_active,
                 },
             )

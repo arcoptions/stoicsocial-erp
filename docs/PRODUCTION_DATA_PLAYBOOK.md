@@ -16,7 +16,7 @@ Use these templates under `docs/templates/data_input/`:
 - `designs.csv`
 - `blank_skus.csv`
 - `printed_skus.csv`
-- `orders.csv`
+- `vendors.csv` (optional, but required before creating print jobs)
 
 ## 3. Full Reset + Sample Baseline (One Command)
 
@@ -66,7 +66,7 @@ python manage.py import_production_csv_bundle --dir docs/templates/data_input --
 - Never use `Unknown` colour in production templates.
 - `printed_skus.csv` rows must have matching `design_name + colour` in `designs.csv`.
 - `blank_fabric` in `printed_skus.csv` must map to an existing row in `blank_skus.csv` for each size.
-- `orders.csv` lines should match an existing printed SKU using product + variant + colour + size.
+- Import master inventory before enabling live ordering. Orders are ingested only through Shopify inbound webhooks.
 
 ## 6. Deployment Runbook
 
