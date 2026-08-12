@@ -3,14 +3,101 @@ from __future__ import annotations
 import csv
 import io
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.management import call_command
+from django.core.management.base import CommandError
+from django.core.exceptions import PermissionDenied
 from django.http import FileResponse, HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_http_methods
 
 from core.models import BlankSKU, Design, DesignAsset, Order, OrderLine, PrintedSKU
+
+
+MASTER_DATA_FILES: tuple[tuple[str, str, bool], ...] = (
+    ("designs", "Designs & Assets", True),
+    ("blank_skus", "Plain SKUs & Opening Stock", True),
+    ("printed_skus", "Printed SKUs & Opening Stock", True),
+    ("vendors", "Print Vendors", False),
+)
+MAX_MASTER_DATA_FILE_SIZE = 5 * 1024 * 1024
+
+
+def _require_superuser(request: HttpRequest) -> None:
+    """Reject master-data operations unless the authenticated user is a superuser."""
+    if not request.user.is_authenticated or not request.user.is_superuser:
+        raise PermissionDenied
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def import_master_data(request: HttpRequest) -> HttpResponse:
+    """Validate or import a production master-data CSV bundle from the UI."""
+    _require_superuser(request)
+
+    if request.method == "POST":
+        dry_run = request.POST.get("dry_run") == "on"
+        if not dry_run and request.POST.get("confirm_import") != "on":
+            messages.error(request, "Confirm that this import may update existing master data and stock values.")
+            return redirect("import-master-data")
+
+        uploaded_files = {}
+        for field_name, label, required in MASTER_DATA_FILES:
+            uploaded_file = request.FILES.get(field_name)
+            if required and uploaded_file is None:
+                messages.error(request, f"{label} CSV is required.")
+                return redirect("import-master-data")
+            if uploaded_file is None:
+                continue
+            if not uploaded_file.name.lower().endswith(".csv"):
+                messages.error(request, f"{label} must be a CSV file.")
+                return redirect("import-master-data")
+            if uploaded_file.size > MAX_MASTER_DATA_FILE_SIZE:
+                messages.error(request, f"{label} exceeds the 5 MB upload limit.")
+                return redirect("import-master-data")
+            uploaded_files[field_name] = uploaded_file
+
+        try:
+            with TemporaryDirectory() as directory:
+                bundle_dir = Path(directory)
+                for field_name, uploaded_file in uploaded_files.items():
+                    destination = bundle_dir / f"{field_name}.csv"
+                    with destination.open("wb") as handle:
+                        for chunk in uploaded_file.chunks():
+                            handle.write(chunk)
+
+                output = io.StringIO()
+                call_command(
+                    "import_production_csv_bundle",
+                    "--dir",
+                    str(bundle_dir),
+                    *(('--dry-run',) if dry_run else ()),
+                    stdout=output,
+                )
+        except (CommandError, UnicodeError, ValueError) as exc:
+            messages.error(request, f"Master data import failed: {exc}")
+        else:
+            action = "validated" if dry_run else "imported"
+            messages.success(request, f"Master data {action} successfully.")
+
+        return redirect("import-master-data")
+
+    return render(request, "core/import_master_data.html", {"master_data_files": MASTER_DATA_FILES})
+
+
+@login_required
+def download_master_data_templates(request: HttpRequest) -> FileResponse:
+    """Download the production master-data CSV template bundle."""
+    _require_superuser(request)
+    template_path = Path(__file__).resolve().parents[2] / "docs" / "templates" / "BoldERP_New_Data_Templates.zip"
+    return FileResponse(
+        template_path.open("rb"),
+        as_attachment=True,
+        filename="BoldERP_New_Data_Templates.zip",
+    )
 
 
 @login_required

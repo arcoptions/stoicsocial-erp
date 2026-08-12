@@ -8,7 +8,12 @@ from core.services.shopify import shopify_webhook_view
 from core.views.adjust import adjust_inventory
 from core.views.audit import audit_log, webhook_event_log
 from core.views.forecast import forecast_view
-from core.views.import_data import import_test_data, download_csv_template
+from core.views.import_data import (
+    download_csv_template,
+    download_master_data_templates,
+    import_master_data,
+    import_test_data,
+)
 from core.views.modules import sales_dashboard
 from core.views.finance import (
     finance_dashboard,
@@ -57,6 +62,12 @@ urlpatterns = [
     path("ops/inventory/webhook-events/", webhook_event_log, name="webhook-event-log"),
     path("ops/inventory/import/", import_test_data, name="import-test-data"),
     path("ops/inventory/import/template/<str:template_name>/", download_csv_template, name="download-csv-template"),
+    path("ops/inventory/master-data-import/", import_master_data, name="import-master-data"),
+    path(
+        "ops/inventory/master-data-import/templates/",
+        download_master_data_templates,
+        name="download-master-data-templates",
+    ),
 
     # Legacy inventory aliases kept to avoid breaking existing links/bookmarks
     path("ops/orders/", RedirectView.as_view(pattern_name="order-list", permanent=False), name="order-list-legacy"),

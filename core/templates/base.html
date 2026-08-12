@@ -381,6 +381,9 @@
         <a href="{% url 'vendor-list' %}" class="bi-module-link{% if '/ops/inventory/vendors/' in request.path %} active{% endif %}">Vendors</a>
         <a href="{% url 'webhook-event-log' %}" class="bi-module-link{% if '/ops/inventory/webhook-events/' in request.path %} active{% endif %}">Webhook Events</a>
         <a href="{% url 'import-test-data' %}" class="bi-module-link{% if '/ops/inventory/import/' in request.path %} active{% endif %}">Import Data</a>
+        {% if request.user.is_superuser %}
+        <a href="{% url 'import-master-data' %}" class="bi-module-link{% if '/ops/inventory/master-data-import/' in request.path %} active{% endif %}">Master Data Import</a>
+        {% endif %}
       </div>
       {% endif %}
 
