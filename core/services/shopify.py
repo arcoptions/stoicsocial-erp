@@ -429,6 +429,7 @@ def ingest_order(payload: dict[str, Any], *, apply_inventory_side_effects: bool 
     order_query = Order.objects.select_for_update() if apply_inventory_side_effects else Order.objects
     existing_order = order_query.filter(shopify_order_id=shopify_order_id).first()
     incoming_fulfillment_status = _normalize_fulfillment_status(payload.get("fulfillment_status"))
+    is_cancelled = bool(payload.get("cancelled_at"))
     fulfillment_status = incoming_fulfillment_status or _normalize_fulfillment_status(
         existing_order.shopify_fulfillment_status if existing_order is not None else ""
     )
@@ -456,7 +457,12 @@ def ingest_order(payload: dict[str, Any], *, apply_inventory_side_effects: bool 
         if line is None:
             continue
         seen_line_ids.add(line.shopify_line_id)
-        if fulfillment_status == "fulfilled":
+        if is_cancelled:
+            if apply_inventory_side_effects:
+                _cancel_line(line)
+            else:
+                _cancel_line_without_inventory(line)
+        elif fulfillment_status == "fulfilled":
             _mark_line_shipped(line, commit_reserved=False)
         else:
             if apply_inventory_side_effects:
@@ -471,7 +477,10 @@ def ingest_order(payload: dict[str, Any], *, apply_inventory_side_effects: bool 
             else:
                 _cancel_line_without_inventory(stale_line)
 
-    if fulfillment_status == "fulfilled":
+    if is_cancelled:
+        order.status = Order.STATUS_CANCELLED
+        order.save(update_fields=["status", "updated_at"])
+    elif fulfillment_status == "fulfilled":
         order.status = Order.STATUS_SHIPPED
         order.save(update_fields=["status", "updated_at"])
     else:

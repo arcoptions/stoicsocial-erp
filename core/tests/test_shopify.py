@@ -1,7 +1,7 @@
 from django.test import SimpleTestCase, TestCase
 
-from core.models import Design, PrintedSKU
-from core.services.shopify import _extract_variant_and_size, _resolve_printed_sku
+from core.models import Design, Order, OrderLine, PrintedSKU
+from core.services.shopify import _extract_variant_and_size, _resolve_printed_sku, ingest_order
 
 
 class ShopifyVariantParsingTests(SimpleTestCase):
@@ -52,3 +52,26 @@ class ShopifySkuResolutionTests(TestCase):
         self.assertIsNotNone(resolved)
         self.assertEqual(resolved.design, expected_design)
         self.assertEqual(resolved.colour, "Black")
+
+
+class ShopifyOrderIngestionTests(TestCase):
+    def test_backfill_marks_cancelled_order_and_lines_cancelled(self) -> None:
+        order = ingest_order(
+            {
+                "id": "cancelled-order-1",
+                "name": "#1001",
+                "cancelled_at": "2026-08-16T12:00:00Z",
+                "line_items": [
+                    {
+                        "id": "cancelled-line-1",
+                        "title": "Cancelled Product",
+                        "variant_title": "M",
+                        "quantity": 1,
+                    }
+                ],
+            },
+            apply_inventory_side_effects=False,
+        )
+
+        self.assertEqual(order.status, Order.STATUS_CANCELLED)
+        self.assertEqual(order.lines.get().status, OrderLine.STATUS_CANCELLED)
