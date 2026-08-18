@@ -6,7 +6,7 @@
 **Database**: SQLite at `/opt/bolderp/app/db.sqlite3`
 **Webhook Endpoint**: `/webhooks/shopify/` — live, verifying HMAC, processing synchronously
 **Processing**: Synchronous (immediate persistence, no worker required)
-**Catch-up**: `bolderp-shopify-sync.timer` polls Shopify every 10 minutes as a backstop
+**Catch-up**: a `bolderp` cron job polls Shopify every 10 minutes as a backstop
 
 ### View Data
 
@@ -44,7 +44,7 @@ Shopify Admin → **Settings → Notifications → Webhooks** (store-level), or 
 | Order cancellation | `orders/cancelled` | `https://erp.boldanditalic.in/webhooks/shopify/` |
 | Order fulfillment | `orders/fulfilled` | `https://erp.boldanditalic.in/webhooks/shopify/` |
 
-Format **JSON**, API version **2025-01** or later.
+Format **JSON**, API version **2026-07** (what production is pinned to in `.env`).
 
 > ⚠️ **"Order edit" is not "Order update".** The Shopify label *Order edit* is the topic
 > `orders/edited`, which BoldERP does **not** handle — it is dropped with a 200. The one you
@@ -72,7 +72,7 @@ sudo -u bolderp nano /opt/bolderp/app/.env
 SHOPIFY_API_SECRET=<signing secret from the Webhooks page>   # webhooks
 SHOPIFY_SHOP_DOMAIN=c0c416-77.myshopify.com                  # catch-up sync
 SHOPIFY_ADMIN_API_TOKEN=shpat_...                            # catch-up sync
-SHOPIFY_API_VERSION=2025-01                                  # optional
+SHOPIFY_API_VERSION=2026-07                                  # optional; code default is 2025-01
 ```
 
 ```bash
@@ -188,7 +188,7 @@ most likely cause and looks perfectly healthy in the UI. You can also list them 
 
 ```bash
 curl -s -H "X-Shopify-Access-Token: $SHOPIFY_ADMIN_API_TOKEN" \
-  "https://c0c416-77.myshopify.com/admin/api/2025-01/webhooks.json" \
+  "https://c0c416-77.myshopify.com/admin/api/2026-07/webhooks.json" \
   | python -m json.tool
 ```
 
@@ -235,22 +235,25 @@ upserts on `shopify_order_id`.
 
 ### Step 4 — The automatic poll
 
-A systemd timer runs the same catch-up every 10 minutes, so a dropped delivery self-heals.
+A cron job for the `bolderp` user runs the same catch-up every 10 minutes, so a dropped delivery
+self-heals.
 
 ```bash
-systemctl status  bolderp-shopify-sync.timer
-systemctl list-timers 'bolderp*'
-journalctl -u bolderp-shopify-sync --since "-1h" --no-pager
-sudo systemctl start bolderp-shopify-sync.service    # run one now, on demand
+sudo -u bolderp crontab -l                        # the schedule
+tail -f /opt/bolderp/logs/shopify-sync.log        # recent runs, one line each
+sudo -u bolderp /opt/bolderp/app/deploy/shopify-sync.sh   # run one now, on demand
 ```
 
-Unit files live at `/etc/systemd/system/bolderp-shopify-sync.{service,timer}` and are reproduced
-in [DEPLOYMENT.md](DEPLOYMENT.md). Each run looks back 30 minutes — 3× the interval — so a slow
-run cannot leave a gap.
+The script is `deploy/shopify-sync.sh` in this repo, so it updates on every deploy. Each run
+looks back 30 minutes — 3× the interval — so a slow or skipped run cannot leave a gap, and it
+takes an exclusive `flock` so two runs can never overlap on SQLite's single writer.
+
+A systemd timer would be preferable and the units are committed under `deploy/systemd/`, but
+installing them needs root. See [deploy/README.md](deploy/README.md) for the switch-over.
 
 > **Do not use `core.tasks.schedule_shopify_catch_up()`.** It creates a Django-Q `Schedule` row,
 > and there is **no `qcluster` worker service on this server** — the row is created and never
-> fires. The systemd timer above is the real mechanism. The Django-Q function is kept only for
+> fires. The cron job above is the real mechanism. The Django-Q function is kept only for
 > environments that do run a worker.
 
 The poll reads `SHOPIFY_SHOP_DOMAIN`, `SHOPIFY_ADMIN_API_TOKEN` and optionally
@@ -354,7 +357,7 @@ Shopify Admin
     ├→ POST /webhooks/shopify/          (primary path, real time)
     │   (HMAC verification — a 401 here writes nothing to the DB)
     │       ↓
-    └→ bolderp-shopify-sync.timer → manage.py sync_shopify_orders
+    └→ cron (*/10) → deploy/shopify-sync.sh → manage.py sync_shopify_orders
         (catch-up path, polls updated_at_min — same ingest, same result)
             ↓
         core/services/shopify.py

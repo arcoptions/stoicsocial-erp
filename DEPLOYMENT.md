@@ -508,12 +508,25 @@ is normal here, not a problem to "clean up".
 ### Scheduled jobs
 
 There is no `qcluster` worker service, so Django-Q `Schedule` rows never fire. Recurring work
-runs from systemd timers instead:
+runs from the `bolderp` user's crontab instead:
 
 ```bash
-systemctl list-timers 'bolderp*'          # what is scheduled
-journalctl -u bolderp-shopify-sync        # last catch-up sync runs
+sudo -u bolderp crontab -l                        # what is scheduled
+tail -f /opt/bolderp/logs/shopify-sync.log        # last catch-up sync runs
 ```
+
+The only job today is the Shopify catch-up sync, every 10 minutes. See
+[deploy/README.md](deploy/README.md) — including how to switch it to a systemd timer, which is
+preferable but needs root.
+
+### Sudo on the deploy account
+
+`bolderp-agent` has `NOPASSWD: ALL` **as the `bolderp` user**, but its root rights are scoped to
+four commands: `systemctl status|is-active|restart bolderp` and `journalctl -u bolderp *`.
+So `sudo mkdir`, `sudo systemctl daemon-reload` and installing unit files all fail. Anything
+that needs to touch `/etc` requires a real root login. Prefix ordinary work with
+`sudo -u bolderp`, and note that `systemctl is-active` and `journalctl` also work with no sudo
+at all.
 
 ### Rollback
 
