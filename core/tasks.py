@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+import os
 from datetime import datetime, time, timedelta
 from typing import Any
 
@@ -12,6 +14,8 @@ from django_q.tasks import async_task
 
 from core.models import PrintedSKU
 from core.services import shopify
+
+logger = logging.getLogger(__name__)
 
 try:
     import sentry_sdk
@@ -133,6 +137,72 @@ LOW_STOCK_SCHEDULE_SNIPPET = """
 from core.tasks import schedule_low_stock_check_daily
 
 schedule_low_stock_check_daily()
+""".strip()
+
+
+def sync_recent_shopify_orders(minutes: int = 30) -> dict[str, int]:
+    """Pull anything Shopify changed in the last `minutes` and upsert it.
+
+    A safety net for webhooks: if a delivery is dropped, the subscription is removed, or the
+    signing secret drifts, orders still reach the ERP within one poll. Safe to run repeatedly —
+    `ingest_order` upserts on `shopify_order_id`, so re-processing a delivered order is a no-op.
+    """
+    from core.management.commands.sync_shopify_orders import sync_orders
+
+    shop_domain = os.getenv("SHOPIFY_SHOP_DOMAIN", "")
+    access_token = os.getenv("SHOPIFY_ADMIN_API_TOKEN", "")
+    if not shop_domain or not access_token:
+        logger.warning(
+            "Skipping Shopify catch-up: SHOPIFY_SHOP_DOMAIN / SHOPIFY_ADMIN_API_TOKEN are not configured."
+        )
+        return {"fetched": 0, "created": 0, "updated": 0}
+
+    try:
+        counts = sync_orders(
+            shop_domain=shop_domain,
+            access_token=access_token,
+            api_version=os.getenv("SHOPIFY_API_VERSION", "2025-01"),
+            updated_at_min=(timezone.now() - timedelta(minutes=minutes)).isoformat(),
+            apply_inventory=True,
+        )
+    except Exception as exc:
+        _capture_exception(exc)
+        raise
+
+    if counts["created"] or counts["updated"]:
+        logger.info(
+            "Shopify catch-up: fetched=%s created=%s updated=%s",
+            counts["fetched"],
+            counts["created"],
+            counts["updated"],
+        )
+    return counts
+
+
+def schedule_shopify_catch_up(minutes: int = 10) -> Schedule:
+    """Ensure a Django-Q2 schedule polls Shopify for missed orders every `minutes` minutes.
+
+    Requires the `worker: python manage.py qcluster` process to be running.
+    """
+    schedule, _ = Schedule.objects.update_or_create(
+        name="shopify-catch-up",
+        defaults={
+            "func": "core.tasks.sync_recent_shopify_orders",
+            # Overlap the poll window with the interval so a slow run can't leave a gap.
+            "kwargs": f"{{'minutes': {minutes * 3}}}",
+            "schedule_type": Schedule.MINUTES,
+            "minutes": minutes,
+            "next_run": timezone.now() + timedelta(minutes=minutes),
+            "repeats": -1,
+        },
+    )
+    return schedule
+
+
+SHOPIFY_CATCH_UP_SCHEDULE_SNIPPET = """
+from core.tasks import schedule_shopify_catch_up
+
+schedule_shopify_catch_up()
 """.strip()
 
 

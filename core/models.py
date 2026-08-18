@@ -268,6 +268,46 @@ class PrintedSKU(UUIDTimestampedModel):
         return f"{self.design.name} / {variant_label} / {self.colour} / {size_label}"
 
 
+class ProductNameAlias(UUIDTimestampedModel):
+    """Maps a Shopify product title to a design so future orders match automatically.
+
+    Created when an operator repairs an unmatched order line. Shopify keeps sending the same
+    title, so remembering the correction stops it landing in the unmatched list every time.
+    """
+
+    source_name = models.CharField(max_length=220, help_text="Raw Shopify product title, kept for display.")
+    source_variant = models.CharField(max_length=120, blank=True)
+    canonical_name = models.CharField(
+        max_length=220,
+        db_index=True,
+        help_text="Punctuation/case-stripped product title used for lookup.",
+    )
+    canonical_variant = models.CharField(max_length=120, blank=True)
+    design = models.ForeignKey(Design, on_delete=models.CASCADE, related_name="name_aliases")
+    variant = models.CharField(max_length=120, blank=True, help_text="Target printed SKU variant, blank for base.")
+    colour = models.CharField(max_length=60, blank=True, help_text="Target printed SKU colour family.")
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="product_name_aliases",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["canonical_name", "canonical_variant"],
+                name="uniq_productnamealias_canonical",
+            ),
+        ]
+        ordering = ["source_name", "source_variant"]
+
+    def __str__(self) -> str:
+        variant_label = f" / {self.source_variant}" if self.source_variant else ""
+        return f"{self.source_name}{variant_label} → {self.design.name}"
+
+
 class DeletedInventoryItem(UUIDTimestampedModel):
     class RecordType(models.TextChoices):
         BLANK_SKU = "blank_sku", "Plain SKU"
@@ -319,6 +359,14 @@ class Order(UUIDTimestampedModel):
     status = models.CharField(max_length=30, choices=Status.choices, default=Status.NEW)
     shopify_fulfillment_status = models.CharField(max_length=80, blank=True)
     shopify_delivery_status = models.CharField(max_length=80, blank=True)
+    shopify_created_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="When the customer placed the order in Shopify (created_at is when BoldERP imported it).",
+    )
+    shopify_updated_at = models.DateTimeField(null=True, blank=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
     raw_payload = models.JSONField(default=dict, blank=True)
     is_test_data = models.BooleanField(
         default=False,
@@ -331,6 +379,11 @@ class Order(UUIDTimestampedModel):
             models.Index(fields=["created_at"], name="order_created_idx"),
         ]
         ordering = ["-created_at"]
+
+    @property
+    def placed_at(self):
+        """Real Shopify order time, falling back to the BoldERP import time."""
+        return self.shopify_created_at or self.created_at
 
     def __str__(self) -> str:
         display_order_no = self.order_no or self.shopify_order_id
@@ -771,6 +824,7 @@ for model in (
     ReprintTask,
     WebhookEvent,
     DeletedInventoryItem,
+    ProductNameAlias,
     Expense,
     BankTransaction,
     Reconciliation,

@@ -19,6 +19,37 @@
     font-family:"DM Sans",sans-serif;
   }
   .secondary-button:hover { background:#ede3d5; }
+
+  /* ── Unmatched order repair controls ── */
+  .repair-cell { display:flex; flex-direction:column; gap:6px; }
+  .repair-line { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .repair-cell select,
+  .repair-cell input[type=text] {
+    padding:6px 8px;
+    font:inherit;
+    font-size:12.5px;
+    border:1px solid #d8d8d8;
+    border-radius:5px;
+    background:#fff;
+    min-width:0;
+    flex:1 1 130px;
+  }
+  .repair-cell select { max-width:230px; }
+  .repair-btn {
+    padding:6px 12px;
+    border:1px solid #1a1208;
+    border-radius:5px;
+    background:#1a1208;
+    color:#fff;
+    font-weight:600;
+    font-size:12.5px;
+    cursor:pointer;
+    white-space:nowrap;
+    font-family:"DM Sans",sans-serif;
+  }
+  .repair-btn:hover:not(:disabled) { background:#000; }
+  .repair-btn:disabled { opacity:.55; cursor:default; }
+  .repair-remember { font-size:11.5px; color:#6b5a45; display:flex; gap:5px; align-items:center; }
 </style>
 {% endblock %}
 {% block content %}
@@ -192,7 +223,9 @@
     <h3 style="margin:0 0 6px;font-size:17px;">⚠ Unmatched Orders — Manual Print Required</h3>
     <p class="muted" style="font-size:13px;margin:0 0 14px;">
       These order lines have no linked PrintedSKU (product names didn't match inventory records during backfill).
-      Print manually and then bulk-mark them as <strong>Shipped</strong> from the Orders page.
+      Fix them below — link to an existing Printed SKU, or create the missing one. Keep
+      <strong>Remember this name</strong> ticked and future Shopify orders with the same product name
+      will match on their own.
     </p>
     <table>
       <thead>
@@ -202,16 +235,43 @@
           <th>Size</th>
           <th style="text-align:center;">Qty Needed</th>
           <th>Order Lines</th>
+          <th style="min-width:330px;">Fix</th>
         </tr>
       </thead>
       <tbody>
         {% for row in unmatched_rows %}
-        <tr>
+        <tr class="unmatched-row"
+            data-product-name="{{ row.product_name }}"
+            data-variant="{{ row.variant }}"
+            data-size="{{ row.size }}">
           <td><strong>{{ row.product_name|default:"—" }}</strong></td>
           <td>{{ row.variant|default:"—" }}</td>
           <td>{{ row.size|default:"—" }}</td>
           <td style="text-align:center;font-weight:700;color:#b91c1c;">{{ row.demand_qty }}</td>
           <td><span class="muted" style="font-size:11px;">{{ row.order_line_ids|length }} line(s)</span></td>
+          <td>
+            <div class="repair-cell">
+              <div class="repair-line">
+                <select class="repair-existing-sku">
+                  <option value="">— Link to existing Printed SKU —</option>
+                  {% for option in printed_sku_options %}
+                    <option value="{{ option.value }}">{{ option.label }}</option>
+                  {% endfor %}
+                </select>
+                <button type="button" class="repair-btn repair-link-btn">Link</button>
+              </div>
+              <div class="repair-line">
+                <input type="text" class="repair-design-name" value="{{ row.product_name }}"
+                       placeholder="Design name" title="Correct the design name if Shopify's title is wrong" />
+                <input type="text" class="repair-sku-variant" value="{{ row.variant }}" placeholder="Variant" style="max-width:110px;" />
+                <input type="text" class="repair-colour" value="" placeholder="Colour" style="max-width:100px;" />
+                <button type="button" class="repair-btn repair-create-btn">Create SKU</button>
+              </div>
+              <label class="repair-remember">
+                <input type="checkbox" class="repair-remember-box" checked /> Remember this name
+              </label>
+            </div>
+          </td>
         </tr>
         {% endfor %}
       </tbody>
@@ -301,5 +361,84 @@ function openMockupDialog(designName, colour) {
     })
     .catch(() => alert('Network error saving mockup link.'));
 }
+
+// ── Unmatched order repair ──────────────────────────────────────────────────
+function postRepair(row, extraFields, button) {
+  const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
+  const body = new URLSearchParams({
+    product_name: row.dataset.productName || '',
+    variant: row.dataset.variant || '',
+    size: row.dataset.size || '',
+    remember: row.querySelector('.repair-remember-box').checked ? '1' : '0',
+    csrfmiddlewaretoken: csrfToken,
+    ...extraFields,
+  });
+
+  const originalLabel = button.textContent;
+  button.disabled = true;
+  button.textContent = 'Saving…';
+
+  fetch(window.location.pathname, {
+    method: 'POST',
+    headers: {
+      'X-Requested-With': 'XMLHttpRequest',
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: body.toString(),
+  })
+    .then((r) => r.json())
+    .then((data) => {
+      if (!data.ok) {
+        alert('Could not fix this row: ' + (data.detail || 'Unknown error'));
+        button.disabled = false;
+        button.textContent = originalLabel;
+        return;
+      }
+      location.reload();
+    })
+    .catch(() => {
+      alert('Network error while fixing this row.');
+      button.disabled = false;
+      button.textContent = originalLabel;
+    });
+}
+
+document.querySelectorAll('.repair-link-btn').forEach((button) => {
+  button.addEventListener('click', () => {
+    const row = button.closest('.unmatched-row');
+    const printedSkuId = row.querySelector('.repair-existing-sku').value;
+    if (!printedSkuId) {
+      alert('Choose a Printed SKU to link to.');
+      return;
+    }
+    postRepair(row, { action: 'link_unmatched', printed_sku_id: printedSkuId }, button);
+  });
+});
+
+document.querySelectorAll('.repair-create-btn').forEach((button) => {
+  button.addEventListener('click', () => {
+    const row = button.closest('.unmatched-row');
+    const designName = row.querySelector('.repair-design-name').value.trim();
+    const colour = row.querySelector('.repair-colour').value.trim();
+    if (!designName) {
+      alert('Design name is required.');
+      return;
+    }
+    if (!colour) {
+      alert('Colour is required.');
+      return;
+    }
+    postRepair(
+      row,
+      {
+        action: 'create_unmatched_sku',
+        design_name: designName,
+        sku_variant: row.querySelector('.repair-sku-variant').value.trim(),
+        colour,
+      },
+      button,
+    );
+  });
+});
 </script>
 {% endblock %}

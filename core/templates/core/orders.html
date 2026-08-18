@@ -166,6 +166,79 @@
   }
   #bulk-action-bar button:hover { background: #c1121f; }
   .order-checkbox { cursor: pointer; width: 16px; height: 16px; }
+
+  /* ── Shopify sync health ── */
+  .sync-banner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px 18px;
+    padding: 10px 16px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    font-size: 13px;
+    border: 1px solid var(--bi-border, #e2d3be);
+    background: var(--bi-card-bg, #fffcf8);
+    color: var(--bi-mid, #5f5f5f);
+  }
+  .sync-banner.stale {
+    background: #feecec;
+    border-color: #e8a8a8;
+    color: #7f1d1d;
+  }
+  .sync-banner strong { color: inherit; }
+  .sync-banner .sync-fix { flex-basis: 100%; font-size: 12px; }
+
+  /* ── Items column ── */
+  .item-line {
+    display: block;
+    font-size: 12.5px;
+    line-height: 1.5;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 340px;
+  }
+  .item-size {
+    font-weight: 700;
+    letter-spacing: 0.03em;
+  }
+  .item-qty { color: var(--bi-mid, #6b5a45); }
+  .item-unmatched {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 0 5px;
+    border-radius: 4px;
+    background: #feecec;
+    border: 1px solid #e8a8a8;
+    color: #9f1239;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .item-more { font-size: 11.5px; color: var(--bi-mid, #6b5a45); }
+
+  /* ── Pagination ── */
+  .pager {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    justify-content: center;
+    padding: 16px 0 4px;
+    font-size: 13px;
+  }
+  .pager a, .pager span.pager-current {
+    padding: 7px 14px;
+    border-radius: 6px;
+    border: 1px solid var(--bi-border, #d8d8d8);
+    text-decoration: none;
+    color: var(--bi-ink, #1a1208);
+    background: #fff;
+  }
+  .pager a:hover { background: #ede3d5; text-decoration: none; }
+  .pager span.pager-current { background: #1a1208; color: #fff; border-color: #1a1208; }
+  .pager .pager-info { color: var(--bi-mid, #6b5a45); }
 </style>
 {% endblock %}
 
@@ -174,6 +247,28 @@
 {# ── Dashboard ── #}
 <div style="margin-bottom:6px;">
   <h2 style="font-size:28px;margin:0 0 18px;">Orders</h2>
+</div>
+
+{# ── Shopify sync health ── #}
+<div class="sync-banner {% if sync_health.is_stale %}stale{% endif %}">
+  {% if sync_health.never_received %}
+    <span><strong>⚠ No Shopify webhook has ever reached this ERP.</strong></span>
+  {% elif sync_health.is_stale %}
+    <span><strong>⚠ No Shopify webhook in the last 24 hours.</strong> Last one was
+      {{ sync_health.last_event_at|timesince }} ago ({{ sync_health.last_event_at|date:"d M Y H:i" }}).</span>
+  {% else %}
+    <span><strong>Shopify sync OK</strong> — {{ sync_health.events_24h }} webhook{{ sync_health.events_24h|pluralize }} in the last 24h,
+      last {{ sync_health.last_event_at|timesince }} ago.</span>
+  {% endif %}
+  {% if sync_health.latest_order_at %}
+    <span>Newest order: <strong>{{ sync_health.latest_order_at|date:"d M Y H:i" }}</strong></span>
+  {% endif %}
+  <span><a href="{% url 'webhook-event-log' %}">Webhook events →</a></span>
+  {% if sync_health.is_stale %}
+  <span class="sync-fix">Check the webhook subscription in Shopify Admin → App → Webhooks, and that
+    <code>SHOPIFY_API_SECRET</code> matches the signing secret. To pull anything missed:
+    <code>python manage.py sync_shopify_orders --since-minutes 1440 --apply-inventory</code></span>
+  {% endif %}
 </div>
 
 <div class="orders-stat-grid">
@@ -275,10 +370,10 @@
         <th style="width:36px;text-align:center;"><input type="checkbox" id="select-all" title="Select all visible" /></th>
         <th>Order No</th>
         <th>Customer</th>
-        <th>Created</th>
+        <th>Placed</th>
         <th>Status</th>
         <th>Fulfillment</th>
-        <th>Lines</th>
+        <th>Items</th>
         <th></th>
       </tr>
     </thead>
@@ -291,13 +386,26 @@
           {{ order.customer_name|default:"—" }}
           {% if order.email %}<br><span class="muted" style="font-size:12px;">{{ order.email }}</span>{% endif %}
         </td>
-        <td style="white-space:nowrap;">
-          {{ order.created_at|date:"d M Y" }}<br>
-          <span class="muted" style="font-size:12px;">{{ order.created_at|time:"H:i" }}</span>
+        <td style="white-space:nowrap;" title="Imported into BoldERP {{ order.created_at|date:'d M Y H:i' }}">
+          {{ order.placed_at|date:"d M Y" }}<br>
+          <span class="muted" style="font-size:12px;">{{ order.placed_at|time:"H:i" }}</span>
         </td>
         <td><span class="status-badge status-{{ order.status }}">{{ order.get_status_display }}</span></td>
         <td>{{ order.shopify_fulfillment_status|default:"—" }}</td>
-        <td style="text-align:center;">{{ order.line_count }}</td>
+        <td>
+          {% for item in order.item_summary %}
+            <span class="item-line" title="{{ item.product_name }}{% if item.variant %} / {{ item.variant }}{% endif %} · {{ item.size }} ×{{ item.quantity }}">
+              {{ item.product_name }}{% if item.variant %} <span class="muted">/ {{ item.variant }}</span>{% endif %}
+              · <span class="item-size">{{ item.size }}</span> <span class="item-qty">×{{ item.quantity }}</span>
+              {% if item.unmatched %}<span class="item-unmatched" title="No printed SKU matched — needs manual print or a name fix">unmatched</span>{% endif %}
+            </span>
+          {% empty %}
+            <span class="muted">—</span>
+          {% endfor %}
+          {% if order.item_overflow %}
+            <a href="{% url 'order-detail' order.id %}" class="item-more">+{{ order.item_overflow }} more</a>
+          {% endif %}
+        </td>
         <td><a href="{% url 'order-detail' order.id %}">View →</a></td>
       </tr>
       {% endfor %}
@@ -307,6 +415,21 @@
   <p style="padding:28px;color:var(--bi-mid);text-align:center;">No orders match the current filters.</p>
   {% endif %}
 </div>
+
+{% if page_obj.paginator.num_pages > 1 %}
+<div class="pager">
+  {% if page_obj.has_previous %}
+    <a href="?page=1{% if querystring %}&amp;{{ querystring }}{% endif %}">« First</a>
+    <a href="?page={{ page_obj.previous_page_number }}{% if querystring %}&amp;{{ querystring }}{% endif %}">‹ Prev</a>
+  {% endif %}
+  <span class="pager-current">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+  {% if page_obj.has_next %}
+    <a href="?page={{ page_obj.next_page_number }}{% if querystring %}&amp;{{ querystring }}{% endif %}">Next ›</a>
+    <a href="?page={{ page_obj.paginator.num_pages }}{% if querystring %}&amp;{{ querystring }}{% endif %}">Last »</a>
+  {% endif %}
+  <span class="pager-info">{{ page_obj.paginator.count }} order{{ page_obj.paginator.count|pluralize }} total</span>
+</div>
+{% endif %}
 </form>
 
 <script>

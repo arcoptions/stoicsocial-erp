@@ -4,18 +4,26 @@ from __future__ import annotations
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Count, Prefetch, Q
+from django.db.models import Count, F, Max, Prefetch, Q
+from django.db.models.functions import Coalesce
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 from django.utils import timezone
 from django.utils.dateparse import parse_date
+from django.utils.http import urlencode
 
-from core.models import Order, OrderLine
+from core.models import Order, OrderLine, WebhookEvent
 from core.security import inventory_access_required
 
 SIZE_ORDER = ["S", "M", "L", "XL", "2XL", "3XL"]
+
+ORDERS_PER_PAGE = 50
+
+# How many item lines to show inline before collapsing the rest behind a "+N more".
+ITEMS_PREVIEW_LIMIT = 3
 
 
 def _size_sort_key(size: str) -> tuple[int, str]:
@@ -25,10 +33,19 @@ def _size_sort_key(size: str) -> tuple[int, str]:
     return (len(SIZE_ORDER), normalized)
 
 
+def _with_placed_at(queryset):
+    """Annotate the real Shopify order time, falling back to the BoldERP import time.
+
+    `created_at` is auto_now_add, so on backfilled orders it records when the ERP imported the
+    row, not when the customer ordered. Every date the operator sees or filters on uses this.
+    """
+    return queryset.annotate(placed_at_db=Coalesce("shopify_created_at", "created_at"))
+
+
 def _build_dashboard_stats() -> dict:
     """Compute dashboard KPIs shown at the top of the orders page."""
     now = timezone.now()
-    all_orders = Order.objects.all()
+    all_orders = _with_placed_at(Order.objects.all())
 
     total = all_orders.count()
     new_count = all_orders.filter(status=Order.STATUS_NEW).count()
@@ -42,7 +59,7 @@ def _build_dashboard_stats() -> dict:
     # Orders stuck ≥ 3 days without reaching shipped/cancelled
     stale_threshold = now - timezone.timedelta(days=3)
     stale = all_orders.filter(
-        created_at__lte=stale_threshold,
+        placed_at_db__lte=stale_threshold,
     ).exclude(
         status__in=[Order.STATUS_SHIPPED, Order.STATUS_CANCELLED],
     ).count()
@@ -50,7 +67,7 @@ def _build_dashboard_stats() -> dict:
     # Orders stuck ≥ 7 days (urgent)
     urgent_threshold = now - timezone.timedelta(days=7)
     urgent = all_orders.filter(
-        created_at__lte=urgent_threshold,
+        placed_at_db__lte=urgent_threshold,
     ).exclude(
         status__in=[Order.STATUS_SHIPPED, Order.STATUS_CANCELLED],
     ).count()
@@ -69,13 +86,87 @@ def _build_dashboard_stats() -> dict:
     }
 
 
+def _build_sync_health() -> dict:
+    """Summarise whether Shopify is still reaching the ERP.
+
+    A rejected webhook (wrong signing secret, deleted subscription) writes nothing to the
+    database, so the only visible symptom is silence. Surfacing that silence is the point.
+    """
+    now = timezone.now()
+    last_event = WebhookEvent.objects.filter(source="shopify").order_by("-created_at").first()
+    last_24h = WebhookEvent.objects.filter(
+        source="shopify", created_at__gte=now - timezone.timedelta(hours=24)
+    ).count()
+    latest_order_at = Order.objects.aggregate(
+        latest=Max(Coalesce("shopify_created_at", "created_at"))
+    )["latest"]
+
+    stale_hours = None
+    if last_event is not None:
+        stale_hours = (now - last_event.created_at).total_seconds() / 3600
+
+    return {
+        "last_event_at": last_event.created_at if last_event else None,
+        "last_event_topic": last_event.topic if last_event else "",
+        "events_24h": last_24h,
+        "latest_order_at": latest_order_at,
+        "stale_hours": stale_hours,
+        # No webhook in 24h means either nothing sold for a day or delivery is broken.
+        # Either way it warrants a look, so we flag it rather than guess.
+        "is_stale": last_24h == 0,
+        "never_received": last_event is None,
+    }
+
+
+def _build_item_summaries(orders) -> None:
+    """Attach a compact product+size summary to each order for the list view.
+
+    Lines are merged per product/variant/size so a 6-line order reads as two or three rows.
+    """
+    for order in orders:
+        grouped: dict[tuple[str, str, str], dict] = {}
+        for line in order.lines.all():
+            if line.status == OrderLine.STATUS_CANCELLED:
+                continue
+            size = (line.size or "").upper() or "NO SIZE"
+            key = (line.product_name, line.variant or "", size)
+            entry = grouped.setdefault(
+                key,
+                {
+                    "product_name": line.product_name,
+                    "variant": line.variant or "",
+                    "size": size,
+                    "quantity": 0,
+                    "unmatched": False,
+                },
+            )
+            entry["quantity"] += line.quantity
+            if line.printed_sku_id is None:
+                entry["unmatched"] = True
+
+        items = sorted(
+            grouped.values(),
+            key=lambda entry: (entry["product_name"].lower(), entry["variant"].lower(), _size_sort_key(entry["size"])),
+        )
+        order.item_summary = items[:ITEMS_PREVIEW_LIMIT]
+        order.item_overflow = max(0, len(items) - ITEMS_PREVIEW_LIMIT)
+        order.unmatched_count = sum(1 for entry in items if entry["unmatched"])
+
+
 @login_required
 @inventory_access_required
 def order_list(request: HttpRequest) -> HttpResponse:
     """Show all orders with combined status/tag/date/search/SKU filters."""
     qs = (
-        Order.objects.annotate(line_count=Count("lines"))
-        .order_by("-created_at")
+        _with_placed_at(Order.objects.all())
+        .annotate(line_count=Count("lines", distinct=True))
+        .prefetch_related(
+            Prefetch(
+                "lines",
+                queryset=OrderLine.objects.select_related("printed_sku__design").order_by("product_name", "size"),
+            )
+        )
+        .order_by(F("placed_at_db").desc(nulls_last=True))
     )
 
     status = request.GET.get("status", "").strip()
@@ -90,17 +181,17 @@ def order_list(request: HttpRequest) -> HttpResponse:
     if age in {"stale", "urgent"}:
         threshold_days = 7 if age == "urgent" else 3
         threshold = timezone.now() - timezone.timedelta(days=threshold_days)
-        qs = qs.filter(created_at__lte=threshold).exclude(
+        qs = qs.filter(placed_at_db__lte=threshold).exclude(
             status__in=[Order.STATUS_SHIPPED, Order.STATUS_CANCELLED],
         )
     if date_from:
         parsed = parse_date(date_from)
         if parsed:
-            qs = qs.filter(created_at__date__gte=parsed)
+            qs = qs.filter(placed_at_db__date__gte=parsed)
     if date_to:
         parsed = parse_date(date_to)
         if parsed:
-            qs = qs.filter(created_at__date__lte=parsed)
+            qs = qs.filter(placed_at_db__date__lte=parsed)
     if q:
         qs = qs.filter(
             Q(order_no__icontains=q)
@@ -116,11 +207,23 @@ def order_list(request: HttpRequest) -> HttpResponse:
             | Q(lines__size__icontains=sku)
         ).distinct()
 
+    paginator = Paginator(qs, ORDERS_PER_PAGE)
+    page = paginator.get_page(request.GET.get("page"))
+    _build_item_summaries(page.object_list)
+
+    # Page links have to carry the active filters, or paging silently resets them.
+    params = request.GET.copy()
+    params.pop("page", None)
+    querystring = urlencode(sorted(params.items()), doseq=True)
+
     return render(
         request,
         "core/orders.html",
         {
-            "orders": qs,
+            "orders": page.object_list,
+            "page_obj": page,
+            "paginator": paginator,
+            "querystring": querystring,
             "statuses": Order.Status.choices,
             "filters": {
                 "status": status,
@@ -131,6 +234,7 @@ def order_list(request: HttpRequest) -> HttpResponse:
                 "sku": sku,
             },
             "stats": _build_dashboard_stats(),
+            "sync_health": _build_sync_health(),
         },
     )
 

@@ -28,7 +28,7 @@ from core.models import (
     Vendor,
 )
 from core.security import inventory_access_required
-from core.services import inventory, pdf
+from core.services import inventory, pdf, shopify
 
 SIZE_ORDER = ["S", "M", "L", "XL", "2XL", "3XL"]
 
@@ -258,6 +258,151 @@ def _link_mockup_batch(request: HttpRequest) -> HttpResponse:
     return JsonResponse({"ok": True, "message": f"Mockup linked: {placement}", "file_id": str(file_obj.id)})
 
 
+UNMATCHED_ORDER_STATUSES = [
+    Order.STATUS_NEW,
+    Order.STATUS_NEEDS_PRINTING,
+    Order.STATUS_IN_PRINTING,
+    Order.STATUS_READY_TO_SHIP,
+]
+
+
+def _sku_for_size(printed_sku: PrintedSKU, size: str) -> PrintedSKU:
+    """Return the sibling of ``printed_sku`` in ``size``, creating it if we don't stock it yet."""
+    normalized = (size or "").strip()
+    if not normalized or (printed_sku.size or "") == normalized:
+        return printed_sku
+
+    sibling, _ = PrintedSKU.objects.get_or_create(
+        design=printed_sku.design,
+        variant=printed_sku.variant,
+        colour=printed_sku.colour,
+        size=normalized,
+        defaults={
+            "design_asset": printed_sku.design_asset,
+            "on_hand": 0,
+            "reserved": 0,
+            "buffer_min": printed_sku.buffer_min,
+            "buffer_target": printed_sku.buffer_target,
+            "buffer_max": printed_sku.buffer_max,
+        },
+    )
+    return sibling
+
+
+def _find_unmatched_lines(product_name: str, variant: str, size: str) -> list[OrderLine]:
+    """Return the live unmatched lines behind one row of the unmatched table.
+
+    Grouping is repeated in Python rather than pushed into SQL so it stays identical to
+    `_build_all_batch_rows`, including its "Unknown" stand-in for a blank product name.
+    """
+    wanted = (product_name.strip(), variant.strip(), size.strip())
+    candidates = (
+        OrderLine.objects.select_for_update()
+        .select_related("order")
+        .filter(
+            printed_sku__isnull=True,
+            status=OrderLine.STATUS_TO_BE_PRINTED,
+            order__status__in=UNMATCHED_ORDER_STATUSES,
+        )
+        .order_by("created_at")
+    )
+    return [
+        line
+        for line in candidates
+        if (
+            str(line.product_name or "Unknown").strip(),
+            str(line.variant or "").strip(),
+            str(line.size or "").strip(),
+        )
+        == wanted
+    ]
+
+
+def _apply_unmatched_repair(request: HttpRequest, printed_sku: PrintedSKU) -> HttpResponse:
+    """Link every line behind an unmatched row to ``printed_sku`` and optionally remember the name."""
+    product_name = request.POST.get("product_name", "").strip()
+    variant = request.POST.get("variant", "").strip()
+    size = request.POST.get("size", "").strip()
+
+    lines = _find_unmatched_lines(product_name, variant, size)
+    if not lines:
+        return JsonResponse(
+            {"ok": False, "detail": "Those order lines are no longer unmatched — reload the page."},
+            status=404,
+        )
+
+    for line in lines:
+        shopify.relink_order_line(line, _sku_for_size(printed_sku, str(line.size or "").strip()))
+
+    remembered = False
+    if request.POST.get("remember") == "1" and product_name:
+        shopify.remember_product_name_alias(
+            source_name=product_name,
+            source_variant=variant,
+            printed_sku=printed_sku,
+            user=request.user if request.user.is_authenticated else None,
+        )
+        remembered = True
+
+    label = f"{printed_sku.design.name}"
+    if printed_sku.variant:
+        label += f" / {printed_sku.variant}"
+    label += f" · {printed_sku.colour}"
+    message = f"Linked {len(lines)} line(s) to {label}."
+    if remembered:
+        message += " Future orders with this product name will match automatically."
+    return JsonResponse({"ok": True, "message": message, "linked": len(lines)})
+
+
+@transaction.atomic
+def _link_unmatched(request: HttpRequest) -> HttpResponse:
+    """Point an unmatched row at an existing printed SKU."""
+    printed_sku_id = request.POST.get("printed_sku_id", "").strip()
+    if not printed_sku_id:
+        return JsonResponse({"ok": False, "detail": "Choose a printed SKU first."}, status=400)
+
+    printed_sku = PrintedSKU.objects.select_related("design").filter(id=printed_sku_id).first()
+    if printed_sku is None:
+        return JsonResponse({"ok": False, "detail": "Printed SKU not found."}, status=404)
+
+    return _apply_unmatched_repair(request, printed_sku)
+
+
+@transaction.atomic
+def _create_unmatched_sku(request: HttpRequest) -> HttpResponse:
+    """Create the missing printed SKU for an unmatched row, then link the row to it."""
+    design_name = request.POST.get("design_name", "").strip()
+    colour = request.POST.get("colour", "").strip()
+    sku_variant = request.POST.get("sku_variant", "").strip() or None
+    size = request.POST.get("size", "").strip() or None
+
+    if not design_name:
+        return JsonResponse({"ok": False, "detail": "Design name is required."}, status=400)
+    if not colour:
+        return JsonResponse({"ok": False, "detail": "Colour is required."}, status=400)
+
+    design, _ = Design.objects.get_or_create(name=design_name)
+    design_asset = DesignAsset.objects.filter(design=design, colour__iexact=colour).first()
+    printed_sku, created = PrintedSKU.objects.get_or_create(
+        design=design,
+        variant=sku_variant,
+        colour=colour,
+        size=size,
+        defaults={
+            "design_asset": design_asset,
+            "on_hand": 0,
+            "reserved": 0,
+            "is_active": True,
+        },
+    )
+    if not created and not printed_sku.is_active:
+        printed_sku.is_active = True
+        printed_sku.save(update_fields=["is_active", "updated_at"])
+
+    response = _apply_unmatched_repair(request, printed_sku)
+    return response
+
+
 def _mark_allocated_lines_in_printing(printed_sku: PrintedSKU, qty_to_allocate: int) -> set[str]:
     touched_order_ids: set[str] = set()
     remaining = qty_to_allocate
@@ -341,6 +486,10 @@ def suggest_batch(request: HttpRequest) -> HttpResponse:
             return _link_blank_sku_batch(request)
         if action == "link_mockup":
             return _link_mockup_batch(request)
+        if action == "link_unmatched":
+            return _link_unmatched(request)
+        if action == "create_unmatched_sku":
+            return _create_unmatched_sku(request)
 
     rows = _build_suggested_rows()
     unmatched_rows = _build_unmatched_rows()
@@ -420,6 +569,24 @@ def suggest_batch(request: HttpRequest) -> HttpResponse:
         BlankSKU.objects.order_by("fabric", "colour").values("fabric", "colour").distinct()
     )
 
+    # One option per design/variant/colour family, not per size: the unmatched row already
+    # carries the size, and _sku_for_size creates the sibling if it doesn't exist yet.
+    sku_families: dict[tuple[str, str, str], dict[str, str]] = {}
+    for sku in (
+        PrintedSKU.objects.select_related("design")
+        .filter(is_active=True)
+        .order_by("design__name", "variant", "colour", "size")
+    ):
+        key = (str(sku.design_id), sku.variant or "", sku.colour)
+        if key in sku_families:
+            continue
+        label = sku.design.name
+        if sku.variant:
+            label += f" / {sku.variant}"
+        label += f" · {sku.colour}"
+        sku_families[key] = {"value": str(sku.id), "label": label}
+    printed_sku_options = sorted(sku_families.values(), key=lambda option: option["label"].lower())
+
     return render(
         request,
         "print_batch.html",
@@ -433,6 +600,7 @@ def suggest_batch(request: HttpRequest) -> HttpResponse:
             "recent_jobs": recent_job_rows,
             "unmatched_rows": unmatched_rows,
             "all_blank_skus": all_blank_skus,
+            "printed_sku_options": printed_sku_options,
         },
     )
 

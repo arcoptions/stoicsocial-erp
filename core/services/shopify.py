@@ -12,11 +12,13 @@ logger = logging.getLogger(__name__)
 
 from django.conf import settings
 from django.db import transaction
+from django.db.models import Q
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from django.views.decorators.csrf import csrf_exempt
 
-from core.models import BlankSKU, Order, OrderLine, PrintedSKU, WebhookEvent
+from core.models import BlankSKU, Order, OrderLine, PrintedSKU, ProductNameAlias, WebhookEvent
 from core.services import inventory
 
 
@@ -121,6 +123,94 @@ def _has_valid_size(raw_size: str | None) -> bool:
     return _canonical_size_label(raw_size) in {"XS", "S", "M", "L", "XL", "XXL", "XXXL", "4XL"}
 
 
+def _parse_datetime(value: Any):
+    """Parse a Shopify ISO-8601 timestamp into an aware datetime, or None when unusable."""
+    if not value or not isinstance(value, str):
+        return None
+    parsed = parse_datetime(value.strip())
+    if parsed is None:
+        return None
+    if timezone.is_naive(parsed):
+        return timezone.make_aware(parsed, timezone.get_default_timezone())
+    return parsed
+
+
+def _get_or_create_sku_for_size(template: PrintedSKU, canonical_size: str) -> PrintedSKU:
+    """Return the sibling of ``template`` in ``canonical_size``, creating it if Shopify sells a size we don't stock yet."""
+    blank_fabric = ""
+    if template.blank_sku_id:
+        blank_fabric = template.blank_sku.fabric
+    else:
+        asset = template.design.assets.filter(colour__iexact=template.colour).first()
+        if asset is not None:
+            blank_fabric = asset.blank_fabric
+    matching_blank = None
+    if blank_fabric:
+        matching_blank = BlankSKU.objects.filter(
+            fabric__iexact=blank_fabric,
+            colour__iexact=template.colour,
+            size__iexact=canonical_size,
+        ).first()
+
+    aligned_sku, _ = PrintedSKU.objects.get_or_create(
+        design=template.design,
+        variant=template.variant,
+        colour=template.colour,
+        size=canonical_size,
+        defaults={
+            "blank_sku": matching_blank,
+            "on_hand": 0,
+            "reserved": 0,
+            "buffer_min": template.buffer_min,
+            "buffer_target": template.buffer_target,
+            "buffer_max": template.buffer_max,
+        },
+    )
+    return aligned_sku
+
+
+def _resolve_via_alias(canonical_design: str, canonical_variant: str, canonical_size: str) -> PrintedSKU | None:
+    """Resolve through an operator-recorded name alias, if one covers this product title.
+
+    An alias saved without a variant acts as a catch-all for every variant of that title.
+    """
+    if not canonical_design:
+        return None
+
+    alias = (
+        ProductNameAlias.objects.select_related("design")
+        .filter(canonical_name=canonical_design, canonical_variant=canonical_variant)
+        .first()
+    )
+    if alias is None and canonical_variant:
+        alias = (
+            ProductNameAlias.objects.select_related("design")
+            .filter(canonical_name=canonical_design, canonical_variant="")
+            .first()
+        )
+    if alias is None:
+        return None
+
+    candidates = PrintedSKU.objects.select_related("design", "blank_sku").filter(
+        is_active=True, design_id=alias.design_id
+    )
+    if alias.variant:
+        candidates = candidates.filter(variant__iexact=alias.variant)
+    else:
+        candidates = candidates.filter(Q(variant__isnull=True) | Q(variant=""))
+    if alias.colour:
+        candidates = candidates.filter(colour__iexact=alias.colour)
+
+    sized_match = candidates.filter(size__iexact=canonical_size).first()
+    if sized_match is not None:
+        return sized_match
+
+    template = candidates.first()
+    if template is None:
+        return None
+    return _get_or_create_sku_for_size(template, canonical_size)
+
+
 def _resolve_printed_sku(item: dict[str, Any]) -> PrintedSKU | None:
     """Attempt to resolve a Shopify line item to a printed SKU."""
     query = PrintedSKU.objects.select_related("design").filter(is_active=True)
@@ -140,6 +230,11 @@ def _resolve_printed_sku(item: dict[str, Any]) -> PrintedSKU | None:
         return None
 
     canonical_size = _canonical_size_label(size)
+
+    # Operator-recorded name fixes win over guessing: they are an explicit human decision.
+    alias_match = _resolve_via_alias(_canonical_text(design_name), _canonical_text(variant), canonical_size)
+    if alias_match is not None:
+        return alias_match
 
     scoped_query = query
     if colour:
@@ -201,37 +296,7 @@ def _resolve_printed_sku(item: dict[str, Any]) -> PrintedSKU | None:
     if len(family_keys) != 1:
         return None
 
-    template = family_candidates[0]
-    blank_fabric = ""
-    if template.blank_sku_id:
-        blank_fabric = template.blank_sku.fabric
-    else:
-        asset = template.design.assets.filter(colour__iexact=template.colour).first()
-        if asset is not None:
-            blank_fabric = asset.blank_fabric
-    matching_blank = None
-    if blank_fabric:
-        matching_blank = BlankSKU.objects.filter(
-            fabric__iexact=blank_fabric,
-            colour__iexact=template.colour,
-            size__iexact=canonical_size,
-        ).first()
-
-    aligned_sku, _ = PrintedSKU.objects.get_or_create(
-        design=template.design,
-        variant=template.variant,
-        colour=template.colour,
-        size=canonical_size,
-        defaults={
-            "blank_sku": matching_blank,
-            "on_hand": 0,
-            "reserved": 0,
-            "buffer_min": template.buffer_min,
-            "buffer_target": template.buffer_target,
-            "buffer_max": template.buffer_max,
-        },
-    )
-    return aligned_sku
+    return _get_or_create_sku_for_size(family_candidates[0], canonical_size)
 
 
 def _line_status_for_item(printed_sku: PrintedSKU | None, quantity: int) -> str:
@@ -436,19 +501,33 @@ def ingest_order(payload: dict[str, Any], *, apply_inventory_side_effects: bool 
     delivery_status = _extract_delivery_status(payload) or (
         existing_order.shopify_delivery_status if existing_order is not None else ""
     )
+    defaults: dict[str, Any] = {
+        "order_no": str(payload.get("name") or payload.get("order_number") or "").strip(),
+        "customer_name": str((payload.get("customer") or {}).get("first_name") or "").strip() + (
+            f" {str((payload.get('customer') or {}).get('last_name') or '').strip()}" if (payload.get("customer") or {}).get("last_name") else ""
+        ),
+        "email": str(payload.get("email") or "").strip(),
+        "tags": _parse_tags(payload.get("tags")),
+        "shopify_fulfillment_status": fulfillment_status,
+        "shopify_delivery_status": delivery_status,
+        "raw_payload": payload,
+    }
+
+    # Keep the real Shopify dates; Order.created_at only records when BoldERP imported the row.
+    # Only overwrite from timestamps we could actually parse, so a partial payload can't wipe them.
+    placed_at = _parse_datetime(payload.get("created_at"))
+    if placed_at is not None:
+        defaults["shopify_created_at"] = placed_at
+    shopify_updated_at = _parse_datetime(payload.get("updated_at"))
+    if shopify_updated_at is not None:
+        defaults["shopify_updated_at"] = shopify_updated_at
+    if "cancelled_at" in payload:
+        # Explicitly present means authoritative, including a null that un-cancels the order.
+        defaults["cancelled_at"] = _parse_datetime(payload.get("cancelled_at"))
+
     order, _ = order_query.update_or_create(
         shopify_order_id=shopify_order_id,
-        defaults={
-            "order_no": str(payload.get("name") or payload.get("order_number") or "").strip(),
-            "customer_name": str((payload.get("customer") or {}).get("first_name") or "").strip() + (
-                f" {str((payload.get('customer') or {}).get('last_name') or '').strip()}" if (payload.get("customer") or {}).get("last_name") else ""
-            ),
-            "email": str(payload.get("email") or "").strip(),
-            "tags": _parse_tags(payload.get("tags")),
-            "shopify_fulfillment_status": fulfillment_status,
-            "shopify_delivery_status": delivery_status,
-            "raw_payload": payload,
-        },
+        defaults=defaults,
     )
 
     seen_line_ids: set[str] = set()
@@ -513,7 +592,61 @@ def mark_cancelled(payload: dict[str, Any]) -> None:
         _cancel_line(line)
     order.status = Order.STATUS_CANCELLED
     order.raw_payload = payload
-    order.save(update_fields=["status", "raw_payload", "updated_at"])
+    order.cancelled_at = _parse_datetime(payload.get("cancelled_at")) or timezone.now()
+    order.save(update_fields=["status", "raw_payload", "cancelled_at", "updated_at"])
+
+
+def relink_order_line(order_line: OrderLine, printed_sku: PrintedSKU) -> OrderLine:
+    """Point an unmatched order line at a printed SKU and re-run the live status logic.
+
+    Used by the manual repair flow so a corrected line reserves stock or queues for printing
+    exactly as it would have had Shopify matched it on arrival.
+    """
+    with transaction.atomic():
+        order_line.printed_sku = printed_sku
+        update_fields = ["printed_sku", "updated_at"]
+        if not order_line.size and printed_sku.size:
+            # Lines Shopify sent without a usable size are parked with size="" and flag the
+            # order as an issue; adopting the SKU's size is what clears that.
+            order_line.size = printed_sku.size
+            update_fields.insert(1, "size")
+        order_line.save(update_fields=update_fields)
+        if order_line.status not in {OrderLine.STATUS_CANCELLED, OrderLine.STATUS_SHIPPED}:
+            _set_live_line_status(order_line)
+        order = Order.objects.select_for_update().get(pk=order_line.order_id)
+        _recompute_order(order)
+    return order_line
+
+
+def remember_product_name_alias(
+    *,
+    source_name: str,
+    source_variant: str,
+    printed_sku: PrintedSKU,
+    user=None,
+) -> ProductNameAlias | None:
+    """Record a Shopify product title → design mapping so future orders match on their own.
+
+    Shopify keeps sending the same title, so without this the corrected line lands back in the
+    unmatched list on the next order.
+    """
+    canonical_name = _canonical_text(source_name)
+    if not canonical_name:
+        return None
+
+    alias, _ = ProductNameAlias.objects.update_or_create(
+        canonical_name=canonical_name,
+        canonical_variant=_canonical_text(source_variant),
+        defaults={
+            "source_name": source_name.strip()[:220],
+            "source_variant": (source_variant or "").strip()[:120],
+            "design": printed_sku.design,
+            "variant": (printed_sku.variant or "")[:120],
+            "colour": (printed_sku.colour or "")[:60],
+            "created_by": user,
+        },
+    )
+    return alias
 
 
 @transaction.atomic

@@ -167,9 +167,88 @@ railway run python manage.py shell
 
 ---
 
+## Catch-Up Sync (when webhooks miss orders)
+
+Webhooks are the primary path, but they fail silently: if the subscription is deleted in
+Shopify or `SHOPIFY_API_SECRET` drifts from the signing secret, every delivery is rejected with
+a 401 **before** a `WebhookEvent` row is written. Nothing appears in the events table — the only
+symptom is that orders stop arriving.
+
+### Step 1 — Read the sync-health banner
+
+The Orders page (`/ops/inventory/orders/`) shows a banner above the stat cards with the last
+webhook received, the count in the last 24 hours, and the newest order in the ERP. If no webhook
+has arrived in 24 hours it turns red and names the two things to check. Start there — it tells
+you within seconds whether deliveries stopped, and when.
+
+### Step 2 — Confirm the subscription in Shopify
+
+Shopify Admin → App → **Webhooks**. Confirm the four topics from Step 2 above still exist and
+point at `https://erp.boldanditalic.in/webhooks/shopify/`, and that recent deliveries show 200,
+not 401. A 401 means the secret is wrong; a missing row means the subscription was deleted.
+Re-create the webhook, or re-set `SHOPIFY_API_SECRET` on Railway to match the signing secret.
+
+### Step 3 — Pull in whatever was missed
+
+`sync_shopify_orders` defaults to a full history backfill. Add a window to make it incremental —
+it sends Shopify's `updated_at_min`, so it fetches only orders created or changed since then:
+
+```bash
+# Dry run first: fetch and count, write nothing.
+railway run python manage.py sync_shopify_orders --since-minutes 1440 --dry-run
+
+# Then for real, behaving exactly like a live webhook (reserves printed stock).
+railway run python manage.py sync_shopify_orders --since-minutes 1440 --apply-inventory
+
+# Or from an exact instant, which overrides --since-minutes.
+railway run python manage.py sync_shopify_orders --updated-at-min 2026-08-16T00:00:00Z --apply-inventory
+```
+
+| Flag | Effect |
+|------|--------|
+| `--since-minutes N` | Only orders Shopify updated in the last N minutes |
+| `--updated-at-min ISO` | Same, from an exact ISO-8601 timestamp; overrides `--since-minutes` |
+| `--apply-inventory` | Reserve printed stock as a webhook would. **Omit for a full historical backfill** |
+| `--dry-run` | Fetch and count only; no DB writes |
+
+The command reports `created` and `updated` separately. Re-running it is safe: `ingest_order`
+upserts on `shopify_order_id`, so re-processing an order that already arrived is a no-op.
+
+> Historical orders imported before Aug 2026 carry the date BoldERP imported them in
+> `created_at`. Migration `0008` recovers the real Shopify dates from each order's stored
+> `raw_payload` into `shopify_created_at`, which is what the dashboard sorts and filters on.
+
+### Step 4 — Turn on the automatic poll
+
+A Django-Q2 schedule can run the same catch-up every 10 minutes, so a dropped delivery
+self-heals without anyone noticing:
+
+```bash
+railway run python manage.py shell
+>>> from core.tasks import schedule_shopify_catch_up
+>>> schedule_shopify_catch_up()          # every 10 minutes; pass minutes=N to change
+```
+
+Each run looks back 3× the interval, so a slow run can't leave a gap.
+
+> **This requires the `worker: python manage.py qcluster` process to actually be deployed on
+> Railway.** The `Procfile` declares it, but if that service isn't running the schedule row is
+> created and never fires. Confirm with `railway logs --service <worker>`; if there is no worker
+> service, run the Step 3 command from a Railway cron instead — it does the same work.
+
+Environment variables the poll needs (the same ones the command reads):
+`SHOPIFY_SHOP_DOMAIN`, `SHOPIFY_ADMIN_API_TOKEN`, and optionally `SHOPIFY_API_VERSION`. If any
+are missing the task logs a warning and returns zero counts rather than failing.
+
+---
+
 ## Troubleshooting
 
 ### Webhooks Not Being Processed
+
+0. **Check the sync-health banner** on `/ops/inventory/orders/` — it reports the last webhook
+   received and how long ago. See [Catch-Up Sync](#catch-up-sync-when-webhooks-miss-orders) for
+   the full recovery procedure.
 
 1. **Check Shopify Webhook Status**:
    - Shopify Admin → App → Webhooks
@@ -201,6 +280,15 @@ railway run python manage.py shell
 **"Invalid signature" (401)**
 - SHOPIFY_API_SECRET doesn't match Shopify's secret
 - Fix: Update environment variable on Railway
+- Note: rejected deliveries are **not** written to `WebhookEvent` (the endpoint is public, so
+  logging unauthenticated POSTs would grow the table without bound). They appear only in the
+  Railway logs as a warning, and as silence on the Orders sync banner.
+
+**Orders arriving but showing as unmatched**
+- The Shopify product title doesn't match any Design in the ERP
+- Fix: Print Batches page → "Unmatched Orders" table → link to an existing Printed SKU or create
+  the missing one. Leave **Remember this name** ticked and a `ProductNameAlias` is stored, so
+  every future order with that title matches on its own.
 
 **"SKU is not a valid UUID" (500)**
 - Test payload has invalid SKU format
@@ -238,28 +326,34 @@ Then update webhook endpoint to use `async_task` instead of sync processing.
 
 ### 3. Add Webhook Retry Logic
 
-Shopify retries failed webhooks. Configure Railway alerts:
+Shopify retries failed webhooks on its own. For deliveries it gives up on — or never attempts,
+because the subscription is gone — the poll in
+[Catch-Up Sync](#catch-up-sync-when-webhooks-miss-orders) is the backstop:
 
 ```bash
 railway run python manage.py shell
->>> from django_q.models import Schedule
->>> # Set up periodic reconciliation of stuck orders
+>>> from core.tasks import schedule_shopify_catch_up
+>>> schedule_shopify_catch_up()
 ```
 
 ### 4. Monitor Order Flow
 
-Create a dashboard view showing:
-- Orders by status
-- Recent webhook events
-- Failed webhooks (if any)
+The Orders page already shows orders by status, the sync-health banner, and a link to the
+webhook event log. Beyond that, consider alerting on the banner's stale condition.
 
 ---
 
 ## Commands Reference
 
 ```bash
-# View recent orders
-railway run python manage.py shell -c "from core.models import Order; print(list(Order.objects.order_by('-created_at')[:5]))"
+# View recent orders (by real Shopify order date, not import date)
+railway run python manage.py shell -c "from core.models import Order; print(list(Order.objects.order_by('-shopify_created_at')[:5]))"
+
+# Catch up on anything webhooks missed in the last day
+railway run python manage.py sync_shopify_orders --since-minutes 1440 --apply-inventory
+
+# Enable the 10-minute automatic catch-up poll (needs the qcluster worker)
+railway run python manage.py shell -c "from core.tasks import schedule_shopify_catch_up; schedule_shopify_catch_up()"
 
 # Seed test data
 railway run python manage.py seed_test_data --full
@@ -281,15 +375,18 @@ railway up --detach
 ```
 Shopify Admin
     ↓
-    └→ POST /webhooks/shopify/
-        (HMAC verification)
+    ├→ POST /webhooks/shopify/          (primary path, real time)
+    │   (HMAC verification — a 401 here writes nothing to the DB)
+    │       ↓
+    └→ sync_shopify_orders / core.tasks.sync_recent_shopify_orders
+        (catch-up path, polls updated_at_min — same ingest, same result)
             ↓
         core/services/shopify.py
-            ├→ ingest_order()
+            ├→ ingest_order()           (upsert on shopify_order_id)
             ├→ mark_cancelled()
             └→ sync_fulfillment()
             ↓
-        Database (Orders, OrderLines, WebhookEvents)
+        Database (Orders, OrderLines, WebhookEvents, ProductNameAlias)
             ↓
         Inventory System
         (reserve_printed, release_printed, commit_printed)
@@ -300,5 +397,5 @@ Shopify Admin
 ---
 
 **Status**: ✅ Live and ready for Shopify integration  
-**Last Updated**: 2026-06-14  
+**Last Updated**: 2026-08-18  
 **Documentation**: See [SHOPIFY_WEBHOOK_SETUP.md](docs/SHOPIFY_WEBHOOK_SETUP.md) for detailed guide
