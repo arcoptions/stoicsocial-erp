@@ -334,3 +334,85 @@ class RelinkOrderLineTests(TestCase):
 
         line.refresh_from_db()
         self.assertEqual(line.size, "XL")
+
+
+class ShopifyReingestIdempotencyTests(TestCase):
+    """A catch-up sync re-ingests every order Shopify touched, so ingestion must be replay-safe."""
+
+    def _payload(self, **extra: object) -> dict:
+        payload = {
+            "id": "reingest-1",
+            "name": "#9001",
+            "created_at": "2026-08-18T10:00:00+05:30",
+            "updated_at": "2026-08-18T10:05:00+05:30",
+            "line_items": [
+                {
+                    "id": "reingest-line-1",
+                    "title": "Reingest Tee",
+                    "variant_title": "Black / M",
+                    "quantity": 1,
+                }
+            ],
+        }
+        payload.update(extra)
+        return payload
+
+    def setUp(self) -> None:
+        design = Design.objects.create(name="Reingest Tee")
+        self.sku = PrintedSKU.objects.create(design=design, colour="Black", size="M", on_hand=0)
+
+    def test_reingest_leaves_in_printing_line_alone(self) -> None:
+        ingest_order(self._payload())
+        line = OrderLine.objects.get(shopify_line_id="reingest-line-1")
+        line.status = OrderLine.STATUS_IN_PRINTING
+        line.save(update_fields=["status"])
+        order = line.order
+        order.status = Order.STATUS_IN_PRINTING
+        order.save(update_fields=["status"])
+
+        # Shopify touches the order for an unrelated reason (tag, note, payment capture).
+        ingest_order(self._payload(updated_at="2026-08-18T11:00:00+05:30"))
+
+        line.refresh_from_db()
+        order.refresh_from_db()
+        self.assertEqual(line.status, OrderLine.STATUS_IN_PRINTING)
+        self.assertEqual(order.status, Order.STATUS_IN_PRINTING)
+
+    def test_reingest_leaves_in_printing_line_alone_without_inventory(self) -> None:
+        ingest_order(self._payload(), apply_inventory_side_effects=False)
+        line = OrderLine.objects.get(shopify_line_id="reingest-line-1")
+        line.status = OrderLine.STATUS_IN_PRINTING
+        line.save(update_fields=["status"])
+
+        ingest_order(self._payload(), apply_inventory_side_effects=False)
+
+        line.refresh_from_db()
+        self.assertEqual(line.status, OrderLine.STATUS_IN_PRINTING)
+
+    def test_repeated_ingest_does_not_double_reserve_stock(self) -> None:
+        self.sku.on_hand = 10
+        self.sku.save(update_fields=["on_hand"])
+        ingest_order(self._payload())
+        self.sku.refresh_from_db()
+        reserved_after_first = self.sku.reserved
+
+        for _ in range(3):
+            ingest_order(self._payload())
+
+        self.sku.refresh_from_db()
+        self.assertEqual(reserved_after_first, 1)
+        self.assertEqual(self.sku.reserved, reserved_after_first)
+
+    def test_reingest_still_promotes_a_to_be_printed_line_once_stock_arrives(self) -> None:
+        ingest_order(self._payload())
+        line = OrderLine.objects.get(shopify_line_id="reingest-line-1")
+        self.assertEqual(line.status, OrderLine.STATUS_TO_BE_PRINTED)
+
+        self.sku.on_hand = 5
+        self.sku.save(update_fields=["on_hand"])
+        ingest_order(self._payload())
+
+        line.refresh_from_db()
+        self.sku.refresh_from_db()
+        self.assertEqual(line.status, OrderLine.STATUS_READY_SHIP)
+        self.assertEqual(self.sku.reserved, 1)

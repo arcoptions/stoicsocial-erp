@@ -432,71 +432,94 @@ mypy core/
 
 ---
 
-## Part 10: Docker Deployment (Optional)
+## Part 10: Production Deployment (WHM server)
 
-### Build Docker Image
+Production is a WHM/cPanel box serving `https://erp.boldanditalic.in`. There is **no Railway,
+no Docker and no CI/CD** — deployment is a git pull over SSH followed by a service restart.
+
+| | |
+|---|---|
+| SSH | `ssh bolderp` (alias in `~/.ssh/config` → `132.148.130.26`, user `bolderp-agent`) |
+| Project | `/opt/bolderp/app` |
+| Virtualenv | `/opt/bolderp/venv` |
+| Runs as | user/group `bolderp` |
+| Service | `bolderp.service` (systemd) |
+| App server | gunicorn `config.wsgi:application` on `127.0.0.1:8010`, 3 workers |
+| Reverse proxy | Apache terminates TLS and forwards to gunicorn |
+| Database | **SQLite** at `/opt/bolderp/app/db.sqlite3` |
+| Env file | `/opt/bolderp/app/.env` (read by systemd via `EnvironmentFile=`) |
+
+### Deploying
+
+From your machine, push to `main` first. Then:
 
 ```bash
-# Build the image
-docker build -t bolderp:latest .
-
-# Run the container with environment variables
-docker run -p 8000:8000 \
-  -e DJANGO_SECRET_KEY="your-secret-key" \
-  -e DEBUG=False \
-  -e DATABASE_URL="postgresql://user:pass@db:5432/bolderp" \
-  -e SHOPIFY_API_SECRET="your-shopify-secret" \
-  bolderp:latest
+./deploy.sh
 ```
 
-### Using Docker Compose (Create `docker-compose.yml`)
+`deploy.sh` performs the whole sequence and refuses to continue if the incoming commits
+touch `db.sqlite3`, `.env` or `media/`. To do it by hand:
 
-```yaml
-version: '3.9'
-
-services:
-  db:
-    image: postgres:15
-    environment:
-      POSTGRES_DB: bolderp
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
-
-  web:
-    build: .
-    command: /app/entrypoint.sh
-    ports:
-      - "8000:8000"
-    environment:
-      DATABASE_URL: postgresql://postgres:postgres@db:5432/bolderp
-      DJANGO_SECRET_KEY: your-secret-key
-      DEBUG: "False"
-    depends_on:
-      - db
-    volumes:
-      - ./media:/app/media
-
-  worker:
-    build: .
-    command: python manage.py qcluster
-    environment:
-      DATABASE_URL: postgresql://postgres:postgres@db:5432/bolderp
-      DJANGO_SECRET_KEY: your-secret-key
-    depends_on:
-      - db
-
-volumes:
-  postgres_data:
-```
-
-Start with Docker Compose:
 ```bash
-docker-compose up
+ssh bolderp
+cd /opt/bolderp/app
+
+# 1. Back up the live DB first (sqlite online-backup API — safe while running)
+sudo -u bolderp /opt/bolderp/venv/bin/python -c "
+import sqlite3; s=sqlite3.connect('db.sqlite3')
+d=sqlite3.connect('/opt/bolderp/runtime/backups/db-$(date +%Y%m%d-%H%M%S).sqlite3')
+s.backup(d); d.close(); s.close()"
+
+# 2. Fetch — the explicit refspec is REQUIRED (see below)
+sudo -u bolderp git fetch origin "+refs/heads/main:refs/remotes/origin/main"
+sudo -u bolderp git merge origin/main
+
+# 3. Apply and restart
+sudo -u bolderp /opt/bolderp/venv/bin/python manage.py migrate
+sudo -u bolderp /opt/bolderp/venv/bin/python manage.py collectstatic --noinput
+sudo systemctl restart bolderp
+
+# 4. Verify
+curl -s -o /dev/null -w "%{http_code}\n" https://erp.boldanditalic.in/   # expect 302
+journalctl -u bolderp --since "-5m" --no-pager | grep -i error
 ```
+
+### ⚠ Never use `git reset --hard` or `git checkout -- .` on the server
+
+`.gitignore` is empty in this repo, so `.env`, `db.sqlite3`, `media/` and `staticfiles/` are
+all **committed**. Any command that restores tracked files from a commit will overwrite the
+live production database and the production secrets with a stale snapshot. Use `git merge`
+only. The server's working tree shows `.env` and `db.sqlite3` as permanently modified — that
+is normal here, not a problem to "clean up".
+
+### Gotchas that will cost you time
+
+1. **`git fetch origin main` does not update `refs/remotes/origin/main`.** It only moves
+   `FETCH_HEAD`, so `origin/main` looks stale and the merge is a no-op. Always pass the
+   explicit refspec shown above.
+2. **`python3` is not on PATH** on this box. Always use `/opt/bolderp/venv/bin/python`.
+3. **The server carries local commits** that duplicate upstream ones, so merges can conflict
+   on files that are byte-identical upstream. Verify with
+   `git diff <server-commit> <upstream-commit> -- <file>`; if the diff is empty, resolve with
+   `git checkout origin/main -- <file>`.
+4. **`curl 127.0.0.1:8010` returns 400.** That is `ALLOWED_HOSTS` rejecting the bare IP, not a
+   failure. Verify against the public hostname instead.
+
+### Scheduled jobs
+
+There is no `qcluster` worker service, so Django-Q `Schedule` rows never fire. Recurring work
+runs from systemd timers instead:
+
+```bash
+systemctl list-timers 'bolderp*'          # what is scheduled
+journalctl -u bolderp-shopify-sync        # last catch-up sync runs
+```
+
+### Rollback
+
+Restore the most recent backup from `/opt/bolderp/runtime/backups/` over `db.sqlite3` and
+restart the service. Do not roll back code with `git reset --hard` — check out the previous
+commit's source files explicitly, or merge a revert commit.
 
 ---
 
@@ -568,22 +591,24 @@ python manage.py qcluster
 
 **Solutions (choose one):**
 
-1. **Recommended for local dev: Use Docker for PDF generation**
-   ```bash
-   # Build and run the Docker image
-   docker build -t bolderp:latest .
-   docker run -p 8000:8000 bolderp:latest
-   ```
-   The app will work normally on localhost:8000 and PDF generation will work inside Docker.
+1. **Recommended: skip PDF generation locally.** The WeasyPrint import is lazy-loaded, so
+   migrations, tests and every other command work fine on Windows. Only the print-pack PDF
+   download itself fails. Confirming a batch still creates the PrintBatch, PrintJob, stock
+   movements and order status changes — only the PDF render step errors.
 
-2. **Skip PDF generation in local dev:** The app will still work; just don't test the print batch PDF download feature locally.
+2. **Install the GTK runtime** (needed if you must render PDFs on Windows):
+   - Install the MSYS2 GTK3 runtime, or the standalone
+     [gtk3-runtime Windows installer](https://github.com/tschoonj/GTK-for-Windows-Runtime-Environment-Installer/releases)
+   - Add its `bin` directory to `PATH`, then restart your shell so Python can find
+     `libgobject-2.0-0.dll`
+   - Full instructions: https://doc.courtbouillon.org/weasyprint/stable/first_steps.html#windows
 
-3. **Install system dependencies** (advanced):
-   - Follow WeasyPrint docs: https://doc.courtbouillon.org/weasyprint/stable/first_steps.html#installation
-   - For Windows, this requires GTK+ libraries which are complex to set up
+3. **Verify on the server instead.** Production is Linux and has the GTK libraries, so PDF
+   generation works there. Push, deploy, and download a print pack from
+   `https://erp.boldanditalic.in/ops/print-batches/`.
 
-**Workaround for this session:**
-The PDF import is now lazy-loaded, so migrations and other commands will work fine. PDF generation will only fail if you actually try to download a print pack PDF. For that feature, use the Docker approach above.
+> There is no Dockerfile in this repo — it was removed along with the rest of the Railway
+> tooling. Don't reach for `docker build`; it will not find one.
 
 ---
 
@@ -640,5 +665,6 @@ The PDF import is now lazy-loaded, so migrations and other commands will work fi
 
 1. **Development**: Edit code, test locally, commit to git
 2. **Testing**: Run `python manage.py test` before pushing
-3. **Deployment**: Use Docker or Railway platform with Procfile
-4. **Monitoring**: Check logs in `/admin/django_q/task/` for failed tasks
+3. **Deployment**: Push to `main`, then run `./deploy.sh` (see Part 10)
+4. **Monitoring**: `journalctl -u bolderp -f` on the server; webhook health is on the Orders
+   page banner and at `/ops/inventory/webhook-events/`

@@ -1,207 +1,221 @@
-# Shopify Webhook Setup - Complete & Live ✅
+# Shopify Webhook Setup — Live Runbook
 
 ## Current Status
 
-**App**: https://stoicsocial-web-production.up.railway.app  
-**Database**: PostgreSQL online with 4 orders (3 seeded + 1 from test webhook)  
-**Webhook Endpoint**: `/webhooks/shopify/` - Live and processing orders  
+**App**: https://erp.boldanditalic.in (WHM server — see [DEPLOYMENT.md](DEPLOYMENT.md) Part 10)
+**Database**: SQLite at `/opt/bolderp/app/db.sqlite3`
+**Webhook Endpoint**: `/webhooks/shopify/` — live, verifying HMAC, processing synchronously
 **Processing**: Synchronous (immediate persistence, no worker required)
-
----
-
-## Test Credentials
-
-| User | Role | Access | Password |
-|------|------|--------|----------|
-| **ARC** | Admin | All areas | `ARC@BoldERP2026!` |
-| **testim** | Inventory Manager | Inventory only | `Testim@Inv2026!` |
-| **testsales** | Sales Manager | Sales only | `TestSales@2026!` |
-| **testfin** | Finance Manager | Finance only | `TestFin@2026!` |
-
----
-
-## Database Contents
-
-```
-✓ 3 Designs (Classic Tee, Premium Fit, Oversized Drop Shoulder)
-✓ 25 Blank SKUs (inventory stock)
-✓ 36 Printed SKUs (print inventory)
-✓ 4 Orders (3 seeded + 1 from test webhook)
-✓ 5 Order Lines
-```
+**Catch-up**: `bolderp-shopify-sync.timer` polls Shopify every 10 minutes as a backstop
 
 ### View Data
-- **Designs**: https://stoicsocial-web-production.up.railway.app/admin/core/design/
-- **Orders**: https://stoicsocial-web-production.up.railway.app/ops/inventory/orders/
-- **Print Batches**: https://stoicsocial-web-production.up.railway.app/ops/inventory/print-batches/
+
+- **Orders**: https://erp.boldanditalic.in/ops/inventory/orders/
+- **Print Batches**: https://erp.boldanditalic.in/ops/inventory/print-batches/
+- **Webhook events**: https://erp.boldanditalic.in/ops/inventory/webhook-events/
+- **Designs (admin)**: https://erp.boldanditalic.in/admin/core/design/
 
 ---
 
 ## Shopify Integration Setup
 
-### Step 1: Create Shopify App
+### Step 1: Create the Shopify App
 
 1. Log in to Shopify Admin: https://admin.shopify.com
 2. Go to **Settings → Apps and Integrations → Develop apps**
 3. Click **Create an app**:
    - Name: "BoldERP Production"
    - Type: Custom app (for internal use)
-4. In **Configuration** tab, enable scopes:
+4. In **Configuration → Admin API integration**, enable scopes:
    - `read_orders`
    - `write_orders`
-5. Copy the **API Access Token** (you'll need this for Shopify API calls)
+5. Install the app and copy the **Admin API access token** (`shpat_…`). The catch-up sync needs
+   it; webhooks do not.
 
 ### Step 2: Configure Webhooks in Shopify
 
-1. In the Shopify app, go to **Configuration → Webhooks**
-2. **Create webhook** for each topic:
+Shopify Admin → **Settings → Notifications → Webhooks** (store-level), or the app's
+**Configuration → Webhooks** if you subscribed through the app.
 
-| Topic | URL |
-|-------|-----|
-| Orders → Created | `https://erp.boldanditalic.in/webhooks/shopify/` |
-| Orders → Updated | `https://erp.boldanditalic.in/webhooks/shopify/` |
-| Orders → Cancelled | `https://erp.boldanditalic.in/webhooks/shopify/` |
-| Orders → Fulfilled *(optional)* | `https://erp.boldanditalic.in/webhooks/shopify/` |
+| Shopify UI label | Actual topic | URL |
+|---|---|---|
+| Order creation | `orders/create` | `https://erp.boldanditalic.in/webhooks/shopify/` |
+| Order update | `orders/updated` | `https://erp.boldanditalic.in/webhooks/shopify/` |
+| Order cancellation | `orders/cancelled` | `https://erp.boldanditalic.in/webhooks/shopify/` |
+| Order fulfillment | `orders/fulfilled` | `https://erp.boldanditalic.in/webhooks/shopify/` |
 
-3. **Copy the signing secret** from any webhook (all use the same secret)
+Format **JSON**, API version **2025-01** or later.
 
-### Step 3: Configure Railway Environment Variable
+> ⚠️ **"Order edit" is not "Order update".** The Shopify label *Order edit* is the topic
+> `orders/edited`, which BoldERP does **not** handle — it is dropped with a 200. The one you
+> want is *Order update* = `orders/updated`. Subscribing to the wrong one looks correct in the
+> Shopify UI and silently does nothing.
 
-Set the Shopify webhook signing secret on Railway:
+Only these four topics are processed (`core/services/shopify.py`). Anything else is accepted,
+logged as a `WebhookEvent`, and ignored.
+
+Copy the **signing secret** shown on the webhooks page — all webhooks on a store share one.
+
+### Step 3: Set the server environment variables
+
+`.env` lives at `/opt/bolderp/app/.env` and is loaded by systemd via `EnvironmentFile=`. Edit it
+**in place** — never restore it from git, because the repo has an empty `.gitignore` and the
+committed `.env` is a stale snapshot.
 
 ```bash
-railway variable set SHOPIFY_API_SECRET="<YOUR_SHOPIFY_SIGNING_SECRET>" --service stoicsocial-web
+ssh bolderp
+sudo cp /opt/bolderp/app/.env /opt/bolderp/runtime/backups/env-$(date +%Y%m%d-%H%M%S).bak
+sudo -u bolderp nano /opt/bolderp/app/.env
 ```
 
-Replace `<YOUR_SHOPIFY_SIGNING_SECRET>` with the secret from Shopify.
+```ini
+SHOPIFY_API_SECRET=<signing secret from the Webhooks page>   # webhooks
+SHOPIFY_SHOP_DOMAIN=c0c416-77.myshopify.com                  # catch-up sync
+SHOPIFY_ADMIN_API_TOKEN=shpat_...                            # catch-up sync
+SHOPIFY_API_VERSION=2025-01                                  # optional
+```
+
+```bash
+sudo systemctl restart bolderp     # env is only re-read on restart
+```
+
+Verify the secret matches Shopify without printing it:
+
+```bash
+sudo -u bolderp /opt/bolderp/venv/bin/python -c "
+import django, os, hashlib
+os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings'); django.setup()
+from django.conf import settings
+print(hashlib.sha256(settings.SHOPIFY_API_SECRET.encode()).hexdigest()[:12])"
+```
+
+Compare that prefix with the sha256 of the secret in Shopify Admin. Equal → the secret is right.
 
 ---
 
 ## Testing Webhook Delivery
 
-### Test Script
-
-Run the webhook delivery test locally or remotely:
-
 ```bash
-# Test local environment
+# Local (dev server must be running)
 python test_webhook_delivery.py \
   --url http://localhost:8000/webhooks/shopify/ \
   --secret "your-local-secret"
 
-# Test Railway deployment
+# Production
 python test_webhook_delivery.py \
-   --url https://erp.boldanditalic.in/webhooks/shopify/ \
-  --secret "your-shopify-signing-secret" \
-  --skip-verify
+  --url https://erp.boldanditalic.in/webhooks/shopify/ \
+  --secret "your-shopify-signing-secret"
 ```
 
-### Expected Response
-
-**Success (200 OK)**:
+**Success (200 OK)**
 ```json
-{
-  "processed": true,
-  "event_id": "47539e47-a4e0-487b-bfb2-5fce0648b09d"
-}
+{ "processed": true, "event_id": "47539e47-a4e0-487b-bfb2-5fce0648b09d" }
 ```
 
-**HMAC Failure (401)**:
-```json
-{
-  "detail": "Invalid signature"
-}
-```
+**HMAC failure (401)** — `{"detail": "Invalid signature"}`. Note that a 401 is also the *correct*
+response to a deliberately-bad signature, so it is a useful liveness probe: if the endpoint
+returns 401 rather than 404/502, routing and TLS are fine and only the secret is in question.
 
-**Order Error (500)**:
-```json
-{
-  "detail": "error message"
-}
-```
+### Shopify's "Send test notification" button
+
+Each webhook row has its own button and fires **only that one topic** — clicking it on
+*Order creation* does not test *Order update*. The sample payload uses order id
+`820982911946154508`, which does not exist in the ERP, so:
+
+- `orders/create` / `orders/updated` → ingested as a real order (delete it afterwards)
+- `orders/cancelled` / `orders/fulfilled` → a no-op, because there is no such local order
+
+A test notification therefore proves **routing, TLS and HMAC**, not ingestion. Confirm delivery
+on the [webhook events page](https://erp.boldanditalic.in/ops/inventory/webhook-events/).
 
 ---
 
 ## Webhook Behavior
 
-### How Orders Flow
+### How orders flow
 
-1. **Shopify → BoldERP**
-   - Shopify sends POST to `/webhooks/shopify/`
-   - BoldERP verifies HMAC signature
-   - Order ingested and persisted to database
-   - Returns 200 OK immediately
-
-2. **Order Matching**
-   - Line items matched by: design name + colour + size
-   - If printed stock available → `ready_ship` status
-   - If not available → `to_be_printed` status
-   - If no design match → `to_be_printed` (creates demand)
-
-3. **Status Propagation**
-   - Order status = worst-case line status
-   - Statuses: new → needs_printing → in_printing → ready_to_ship → shipped
+1. **Shopify → BoldERP** — POST to `/webhooks/shopify/`, HMAC verified, order persisted,
+   200 returned immediately.
+2. **Order matching** — line items matched by design name + colour + size (or a stored
+   `ProductNameAlias`). Printed stock available → `ready_ship`; otherwise → `to_be_printed`.
+   No design match → the line lands in **Unmatched Orders** on the Print Batches page.
+3. **Status propagation** — order status is the worst-case line status:
+   new → needs_printing → in_printing → ready_to_ship → shipped.
 
 ### Idempotency
 
-- Each webhook has unique `idempotency_key` (Shopify webhook ID)
-- Duplicate webhooks are deduplicated at database level
-- Safe to retry webhook delivery
+Each webhook carries a unique `idempotency_key` (the Shopify webhook id) and `ingest_order`
+upserts on `shopify_order_id`. Duplicate deliveries and re-runs of the catch-up sync are no-ops.
 
-### Event Tracking
+### Event tracking
 
-All webhooks logged in `WebhookEvent` table:
-- `source`: "shopify"
-- `topic`: "orders/create", "orders/updated", etc.
-- `idempotency_key`: Shopify webhook ID
-- `payload`: Full Shopify payload
-- `processed_at`: Timestamp when processed
+Every **accepted** webhook is written to `WebhookEvent` (`source`, `topic`, `idempotency_key`,
+`payload`, `processed_at`). Rejected ones are not — see the note under Common Errors.
 
-View events:
 ```bash
-railway run python manage.py shell
->>> from core.models import WebhookEvent
->>> WebhookEvent.objects.filter(source='shopify').count()
->>> list(WebhookEvent.objects.values('topic', 'processed_at'))
+ssh bolderp
+cd /opt/bolderp/app
+sudo -u bolderp /opt/bolderp/venv/bin/python manage.py shell -c "
+from core.models import WebhookEvent
+print(WebhookEvent.objects.filter(source='shopify').count())
+print(list(WebhookEvent.objects.values('topic','processed_at').order_by('-processed_at')[:10]))"
 ```
+
+**If that count is 0, no webhook has ever reached this server** — the subscription is missing or
+points somewhere else. That is the single most diagnostic number in this document.
 
 ---
 
 ## Catch-Up Sync (when webhooks miss orders)
 
-Webhooks are the primary path, but they fail silently: if the subscription is deleted in
-Shopify or `SHOPIFY_API_SECRET` drifts from the signing secret, every delivery is rejected with
-a 401 **before** a `WebhookEvent` row is written. Nothing appears in the events table — the only
-symptom is that orders stop arriving.
+Webhooks are the primary path, but they fail silently: if the subscription is deleted, points at
+a dead URL, or `SHOPIFY_API_SECRET` drifts from the signing secret, the delivery is rejected
+**before** a `WebhookEvent` row is written. Nothing appears in the events table — the only
+symptom is that orders stop arriving. **Shopify never replays webhooks it failed to deliver**, so
+any outage window has to be closed by a sync.
 
 ### Step 1 — Read the sync-health banner
 
-The Orders page (`/ops/inventory/orders/`) shows a banner above the stat cards with the last
-webhook received, the count in the last 24 hours, and the newest order in the ERP. If no webhook
-has arrived in 24 hours it turns red and names the two things to check. Start there — it tells
-you within seconds whether deliveries stopped, and when.
+The Orders page (`/ops/inventory/orders/`) shows a banner above the stat cards: last webhook
+received, count in the last 24 hours, newest order in the ERP. No webhook in 24 hours turns it
+red. Start there — it tells you within seconds whether deliveries stopped, and when.
 
 ### Step 2 — Confirm the subscription in Shopify
 
-Shopify Admin → App → **Webhooks**. Confirm the four topics from Step 2 above still exist and
-point at `https://erp.boldanditalic.in/webhooks/shopify/`, and that recent deliveries show 200,
-not 401. A 401 means the secret is wrong; a missing row means the subscription was deleted.
-Re-create the webhook, or re-set `SHOPIFY_API_SECRET` on Railway to match the signing secret.
+Shopify Admin → **Settings → Notifications → Webhooks**. Confirm the four topics above exist and
+point at `https://erp.boldanditalic.in/webhooks/shopify/`. A stale URL from an old host is the
+most likely cause and looks perfectly healthy in the UI. You can also list them from the API:
+
+```bash
+curl -s -H "X-Shopify-Access-Token: $SHOPIFY_ADMIN_API_TOKEN" \
+  "https://c0c416-77.myshopify.com/admin/api/2025-01/webhooks.json" \
+  | python -m json.tool
+```
 
 ### Step 3 — Pull in whatever was missed
 
-`sync_shopify_orders` defaults to a full history backfill. Add a window to make it incremental —
-it sends Shopify's `updated_at_min`, so it fetches only orders created or changed since then:
+Back up the database first — the sync writes orders and, with `--apply-inventory`, moves stock.
 
 ```bash
+ssh bolderp
+cd /opt/bolderp/app
+
+sudo -u bolderp /opt/bolderp/venv/bin/python -c "
+import sqlite3; s=sqlite3.connect('db.sqlite3')
+d=sqlite3.connect('/opt/bolderp/runtime/backups/db-$(date +%Y%m%d-%H%M%S).sqlite3')
+s.backup(d); d.close(); s.close()"
+
 # Dry run first: fetch and count, write nothing.
-railway run python manage.py sync_shopify_orders --since-minutes 1440 --dry-run
+sudo -u bolderp /opt/bolderp/venv/bin/python manage.py sync_shopify_orders \
+  --since-minutes 1440 --dry-run
 
 # Then for real, behaving exactly like a live webhook (reserves printed stock).
-railway run python manage.py sync_shopify_orders --since-minutes 1440 --apply-inventory
+sudo -u bolderp /opt/bolderp/venv/bin/python manage.py sync_shopify_orders \
+  --since-minutes 1440 --apply-inventory
 
 # Or from an exact instant, which overrides --since-minutes.
-railway run python manage.py sync_shopify_orders --updated-at-min 2026-08-16T00:00:00Z --apply-inventory
+sudo -u bolderp /opt/bolderp/venv/bin/python manage.py sync_shopify_orders \
+  --updated-at-min 2026-08-16T00:00:00Z --apply-inventory
 ```
 
 | Flag | Effect |
@@ -210,79 +224,78 @@ railway run python manage.py sync_shopify_orders --updated-at-min 2026-08-16T00:
 | `--updated-at-min ISO` | Same, from an exact ISO-8601 timestamp; overrides `--since-minutes` |
 | `--apply-inventory` | Reserve printed stock as a webhook would. **Omit for a full historical backfill** |
 | `--dry-run` | Fetch and count only; no DB writes |
+| `--shop-domain` / `--access-token` / `--api-version` | Override the `.env` values for a one-off run |
 
 The command reports `created` and `updated` separately. Re-running it is safe: `ingest_order`
-upserts on `shopify_order_id`, so re-processing an order that already arrived is a no-op.
+upserts on `shopify_order_id`.
 
 > Historical orders imported before Aug 2026 carry the date BoldERP imported them in
 > `created_at`. Migration `0008` recovers the real Shopify dates from each order's stored
 > `raw_payload` into `shopify_created_at`, which is what the dashboard sorts and filters on.
 
-### Step 4 — Turn on the automatic poll
+### Step 4 — The automatic poll
 
-A Django-Q2 schedule can run the same catch-up every 10 minutes, so a dropped delivery
-self-heals without anyone noticing:
+A systemd timer runs the same catch-up every 10 minutes, so a dropped delivery self-heals.
 
 ```bash
-railway run python manage.py shell
->>> from core.tasks import schedule_shopify_catch_up
->>> schedule_shopify_catch_up()          # every 10 minutes; pass minutes=N to change
+systemctl status  bolderp-shopify-sync.timer
+systemctl list-timers 'bolderp*'
+journalctl -u bolderp-shopify-sync --since "-1h" --no-pager
+sudo systemctl start bolderp-shopify-sync.service    # run one now, on demand
 ```
 
-Each run looks back 3× the interval, so a slow run can't leave a gap.
+Unit files live at `/etc/systemd/system/bolderp-shopify-sync.{service,timer}` and are reproduced
+in [DEPLOYMENT.md](DEPLOYMENT.md). Each run looks back 30 minutes — 3× the interval — so a slow
+run cannot leave a gap.
 
-> **This requires the `worker: python manage.py qcluster` process to actually be deployed on
-> Railway.** The `Procfile` declares it, but if that service isn't running the schedule row is
-> created and never fires. Confirm with `railway logs --service <worker>`; if there is no worker
-> service, run the Step 3 command from a Railway cron instead — it does the same work.
+> **Do not use `core.tasks.schedule_shopify_catch_up()`.** It creates a Django-Q `Schedule` row,
+> and there is **no `qcluster` worker service on this server** — the row is created and never
+> fires. The systemd timer above is the real mechanism. The Django-Q function is kept only for
+> environments that do run a worker.
 
-Environment variables the poll needs (the same ones the command reads):
-`SHOPIFY_SHOP_DOMAIN`, `SHOPIFY_ADMIN_API_TOKEN`, and optionally `SHOPIFY_API_VERSION`. If any
-are missing the task logs a warning and returns zero counts rather than failing.
+The poll reads `SHOPIFY_SHOP_DOMAIN`, `SHOPIFY_ADMIN_API_TOKEN` and optionally
+`SHOPIFY_API_VERSION` from `.env`. If any are missing it logs a warning and returns zero counts
+rather than failing.
 
 ---
 
 ## Troubleshooting
 
-### Webhooks Not Being Processed
+### Webhooks not being processed
 
-0. **Check the sync-health banner** on `/ops/inventory/orders/` — it reports the last webhook
-   received and how long ago. See [Catch-Up Sync](#catch-up-sync-when-webhooks-miss-orders) for
-   the full recovery procedure.
+0. **Check the sync-health banner** on `/ops/inventory/orders/` — last webhook received and how
+   long ago.
 
-1. **Check Shopify Webhook Status**:
-   - Shopify Admin → App → Webhooks
-   - Look for red ❌ or yellow ⚠️ status codes
-   - Click webhook to see recent deliveries
+1. **Count `WebhookEvent` rows** (command under [Event tracking](#event-tracking)). Zero means
+   nothing has ever arrived — go straight to the Shopify subscription URL.
 
-2. **Check Railway Logs**:
+2. **Check Shopify webhook status** — Shopify Admin → Settings → Notifications → Webhooks. Red ❌
+   or ⚠️ status codes, and the URL each one points at.
+
+3. **Check the server logs**:
    ```bash
-   railway logs | grep -i webhook
-   railway logs | grep -i error
+   ssh bolderp
+   journalctl -u bolderp --since "-1h" --no-pager | grep -i webhook
+   journalctl -u bolderp --since "-1h" --no-pager | grep -i "invalid signature"
    ```
 
-3. **Verify HMAC Configuration**:
-   ```bash
-   railway run python manage.py shell
-   >>> from django.conf import settings
-   >>> print(settings.SHOPIFY_API_SECRET)
-   ```
-   - Should match Shopify's signing secret
+4. **Verify the secret** — the sha256-prefix command in Step 3 above.
 
-4. **Test Endpoint Directly**:
-   ```bash
-   python test_webhook_delivery.py --url ... --secret ...
-   ```
-   - Should return 200 OK with `"processed": true`
+5. **Test the endpoint directly** — `python test_webhook_delivery.py --url ... --secret ...`
+   should return 200 with `"processed": true`.
 
-### Common Errors
+### Common errors
 
 **"Invalid signature" (401)**
-- SHOPIFY_API_SECRET doesn't match Shopify's secret
-- Fix: Update environment variable on Railway
-- Note: rejected deliveries are **not** written to `WebhookEvent` (the endpoint is public, so
-  logging unauthenticated POSTs would grow the table without bound). They appear only in the
-  Railway logs as a warning, and as silence on the Orders sync banner.
+- `SHOPIFY_API_SECRET` doesn't match Shopify's signing secret
+- Fix: update `/opt/bolderp/app/.env` and `sudo systemctl restart bolderp`
+- Rejected deliveries are **not** written to `WebhookEvent` (the endpoint is public, so logging
+  unauthenticated POSTs would grow the table without bound). They appear only in
+  `journalctl -u bolderp` as a warning, and as silence on the Orders sync banner.
+
+**Webhooks show delivered in Shopify but nothing in the ERP**
+- Almost always a stale URL on the subscription pointing at a decommissioned host. Shopify shows
+  the delivery as attempted against whatever URL is configured.
 
 **Orders arriving but showing as unmatched**
 - The Shopify product title doesn't match any Design in the ERP
@@ -291,81 +304,44 @@ are missing the task logs a warning and returns zero counts rather than failing.
   every future order with that title matches on its own.
 
 **"SKU is not a valid UUID" (500)**
-- Test payload has invalid SKU format
-- Fix: Webhooks match by design name, not SKU. Leave SKU empty.
+- Test payload has an invalid SKU format. Webhooks match by design name, not SKU — leave it empty.
 
 **Order not created despite 200 OK**
-- Order might already exist (idempotency)
-- Check database: `railway run python manage.py shell`
+- Idempotency: the order already exists. Check with the shell command above.
 
 **502 Bad Gateway**
-- App crashed or still deploying
-- Check status: `railway status`
-- View logs: `railway logs`
-
----
-
-## Next Steps (Optional)
-
-### 1. Set Up Django-Q Worker (For High Volume)
-
-For high-volume Shopify stores (100+ orders/day), offload webhook processing to async worker:
-
-```bash
-railway add --service stoicsocial-worker --dockerfile Dockerfile.worker
-```
-
-Then update webhook endpoint to use `async_task` instead of sync processing.
-
-### 2. Connect to Real Shopify Store
-
-1. Create app in production Shopify store
-2. Update SHOPIFY_API_SECRET on Railway
-3. Configure webhooks in Shopify to point to live endpoint
-4. Test with real orders
-
-### 3. Add Webhook Retry Logic
-
-Shopify retries failed webhooks on its own. For deliveries it gives up on — or never attempts,
-because the subscription is gone — the poll in
-[Catch-Up Sync](#catch-up-sync-when-webhooks-miss-orders) is the backstop:
-
-```bash
-railway run python manage.py shell
->>> from core.tasks import schedule_shopify_catch_up
->>> schedule_shopify_catch_up()
-```
-
-### 4. Monitor Order Flow
-
-The Orders page already shows orders by status, the sync-health banner, and a link to the
-webhook event log. Beyond that, consider alerting on the banner's stale condition.
+- Gunicorn is down or restarting: `sudo systemctl status bolderp` and
+  `journalctl -u bolderp -n 100 --no-pager`.
+- `curl 127.0.0.1:8010` returning **400** is not a fault — `ALLOWED_HOSTS` rejects the bare IP.
+  Test against the public hostname.
 
 ---
 
 ## Commands Reference
 
+All server commands assume `ssh bolderp && cd /opt/bolderp/app`.
+
 ```bash
-# View recent orders (by real Shopify order date, not import date)
-railway run python manage.py shell -c "from core.models import Order; print(list(Order.objects.order_by('-shopify_created_at')[:5]))"
+PY=/opt/bolderp/venv/bin/python
+
+# Recent orders by real Shopify order date, not import date
+sudo -u bolderp $PY manage.py shell -c "from core.models import Order; print(list(Order.objects.order_by('-shopify_created_at')[:5]))"
 
 # Catch up on anything webhooks missed in the last day
-railway run python manage.py sync_shopify_orders --since-minutes 1440 --apply-inventory
+sudo -u bolderp $PY manage.py sync_shopify_orders --since-minutes 1440 --apply-inventory
 
-# Enable the 10-minute automatic catch-up poll (needs the qcluster worker)
-railway run python manage.py shell -c "from core.tasks import schedule_shopify_catch_up; schedule_shopify_catch_up()"
+# Webhook event count
+sudo -u bolderp $PY manage.py shell -c "from core.models import WebhookEvent; print(WebhookEvent.objects.filter(source='shopify').count())"
 
-# Seed test data
-railway run python manage.py seed_test_data --full
+# Catch-up timer
+systemctl list-timers 'bolderp*'
+journalctl -u bolderp-shopify-sync --since "-1d" --no-pager
 
-# Check webhook events
-railway run python manage.py shell -c "from core.models import WebhookEvent; print(WebhookEvent.objects.filter(source='shopify').count())"
+# App logs
+journalctl -u bolderp -f
 
-# View app logs
-railway logs
-
-# Trigger deployment
-railway up --detach
+# Deploy (from your machine, after pushing to main)
+./deploy.sh
 ```
 
 ---
@@ -378,7 +354,7 @@ Shopify Admin
     ├→ POST /webhooks/shopify/          (primary path, real time)
     │   (HMAC verification — a 401 here writes nothing to the DB)
     │       ↓
-    └→ sync_shopify_orders / core.tasks.sync_recent_shopify_orders
+    └→ bolderp-shopify-sync.timer → manage.py sync_shopify_orders
         (catch-up path, polls updated_at_min — same ingest, same result)
             ↓
         core/services/shopify.py
@@ -396,6 +372,5 @@ Shopify Admin
 
 ---
 
-**Status**: ✅ Live and ready for Shopify integration  
-**Last Updated**: 2026-08-18  
-**Documentation**: See [SHOPIFY_WEBHOOK_SETUP.md](docs/SHOPIFY_WEBHOOK_SETUP.md) for detailed guide
+**Last Updated**: 2026-08-18
+**See also**: [DEPLOYMENT.md](DEPLOYMENT.md) Part 10 for the server layout and deploy procedure

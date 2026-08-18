@@ -13,7 +13,8 @@ SECRET_KEY = env("DJANGO_SECRET_KEY", default="unsafe-dev-key-change-me")
 DEBUG = env("DEBUG")
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["*"])
 
-# Trust Railway's forwarded HTTPS headers and configured public hostnames.
+# Gunicorn sits behind the WHM/Apache reverse proxy, which terminates TLS and forwards
+# to 127.0.0.1:8010. Without these, Django sees plain HTTP and builds insecure redirects.
 USE_X_FORWARDED_HOST = True
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 

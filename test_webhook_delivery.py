@@ -6,7 +6,7 @@ Usage:
     # Test locally (Django dev server must be running)
     python test_webhook_delivery.py --url http://localhost:8000/webhooks/shopify/ --secret <local-secret>
     
-    # Test Railway deployment
+    # Test production
     python test_webhook_delivery.py --url https://erp.boldanditalic.in/webhooks/shopify/ --secret <shopify-secret>
 """
 
@@ -337,7 +337,7 @@ def send_webhook_test(
             print(f"   Order processed synchronously")
         elif status_code == 401:
             print(f"\n❌ AUTHENTICATION FAILED (401)")
-            print(f"   Check SHOPIFY_API_SECRET on Railway or local .env")
+            print(f"   Check SHOPIFY_API_SECRET in the server .env or local .env")
         elif status_code == 400:
             print(f"\n❌ BAD REQUEST (400)")
             print(f"   Check payload format and required fields")

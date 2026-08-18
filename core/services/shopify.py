@@ -437,6 +437,19 @@ def _cancel_line_without_inventory(order_line: OrderLine) -> OrderLine:
     return order_line
 
 
+# Line states Shopify is allowed to re-derive from stock levels. Anything else
+# (in_printing, shipped, cancelled) is workflow state the ERP owns: a print batch has
+# claimed the line, so a later orders/updated webhook - or a catch-up sync run, which
+# re-ingests every order Shopify touched - must not drag it back into the print queue.
+RESYNCABLE_LINE_STATUSES = frozenset(
+    {
+        OrderLine.STATUS_NEW,
+        OrderLine.STATUS_TO_BE_PRINTED,
+        OrderLine.STATUS_READY_SHIP,
+    }
+)
+
+
 def _recompute_order(order: Order) -> str:
     """Recompute the worst-case order status from current line states."""
     order.status = WORST_CASE(
@@ -460,11 +473,7 @@ def _apply_live_state_to_order(order: Order) -> str:
         return order.status
 
     for line in live_lines:
-        if line.status in {
-            OrderLine.STATUS_NEW,
-            OrderLine.STATUS_TO_BE_PRINTED,
-            OrderLine.STATUS_READY_SHIP,
-        }:
+        if line.status in RESYNCABLE_LINE_STATUSES:
             _set_live_line_status(line)
 
     recomputed = _recompute_order(order)
@@ -543,7 +552,7 @@ def ingest_order(payload: dict[str, Any], *, apply_inventory_side_effects: bool 
                 _cancel_line_without_inventory(line)
         elif fulfillment_status == "fulfilled":
             _mark_line_shipped(line, commit_reserved=False)
-        else:
+        elif line.status in RESYNCABLE_LINE_STATUSES:
             if apply_inventory_side_effects:
                 _set_live_line_status(line)
             else:
@@ -566,7 +575,7 @@ def ingest_order(payload: dict[str, Any], *, apply_inventory_side_effects: bool 
         if apply_inventory_side_effects:
             _apply_live_state_to_order(order)
         else:
-            for line in order.lines.exclude(status__in=[OrderLine.STATUS_CANCELLED, OrderLine.STATUS_SHIPPED]):
+            for line in order.lines.filter(status__in=RESYNCABLE_LINE_STATUSES):
                 _set_line_status_without_inventory(line)
             recomputed = _recompute_order(order)
             if recomputed == Order.STATUS_NEW:

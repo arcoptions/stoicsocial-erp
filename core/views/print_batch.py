@@ -457,8 +457,9 @@ def print_pack_file(request: HttpRequest, filename: str) -> HttpResponse:
         raise Http404("Invalid file path")
 
     if not file_path.exists() or not file_path.is_file():
-        # Railway deployments can lose local media files. Regenerate on-demand
-        # when filename follows print_pack_<print_job_uuid>.pdf naming.
+        # media/ is not reliably preserved across deploys, so print packs can go missing
+        # on disk while the PrintJob row survives. Regenerate on-demand when the filename
+        # follows print_pack_<print_job_uuid>.pdf naming.
         match = re.fullmatch(r"print_pack_([0-9a-fA-F-]{36})\.pdf", filename)
         if match:
             job_id = match.group(1)
