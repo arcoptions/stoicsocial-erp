@@ -336,9 +336,10 @@ sudo -u bolderp $PY manage.py sync_shopify_orders --since-minutes 1440 --apply-i
 # Webhook event count
 sudo -u bolderp $PY manage.py shell -c "from core.models import WebhookEvent; print(WebhookEvent.objects.filter(source='shopify').count())"
 
-# Catch-up timer
-systemctl list-timers 'bolderp*'
-journalctl -u bolderp-shopify-sync --since "-1d" --no-pager
+# Catch-up poll (cron — see deploy/README.md)
+sudo -u bolderp crontab -l
+tail -20 /opt/bolderp/logs/shopify-sync.log
+sudo -u bolderp /opt/bolderp/app/deploy/shopify-sync.sh   # run one now
 
 # App logs
 journalctl -u bolderp -f
