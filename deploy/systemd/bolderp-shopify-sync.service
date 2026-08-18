@@ -1,0 +1,16 @@
+[Unit]
+Description=BoldERP Shopify catch-up sync
+Documentation=file:///opt/bolderp/app/SHOPIFY_WEBHOOK_LIVE.md
+After=network-online.target bolderp.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=bolderp
+Group=bolderp
+WorkingDirectory=/opt/bolderp/app
+ExecStart=/opt/bolderp/app/deploy/shopify-sync.sh
+TimeoutStartSec=900
+
+# The script reads credentials from /opt/bolderp/app/.env the same way Django does,
+# so no EnvironmentFile is needed here and the secrets stay in one place.

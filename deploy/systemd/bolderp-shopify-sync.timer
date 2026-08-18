@@ -1,0 +1,15 @@
+[Unit]
+Description=Run the BoldERP Shopify catch-up sync every 10 minutes
+Documentation=file:///opt/bolderp/app/SHOPIFY_WEBHOOK_LIVE.md
+
+[Timer]
+# Offset from :00 so this does not align with every other cron job on the box.
+OnCalendar=*:03/10
+# Catch up after a reboot or a period of downtime rather than silently skipping.
+Persistent=true
+AccuracySec=30s
+RandomizedDelaySec=20s
+Unit=bolderp-shopify-sync.service
+
+[Install]
+WantedBy=timers.target

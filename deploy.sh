@@ -138,9 +138,10 @@ fi
 
 # 3. Back up the live SQLite database using the online-backup API, which is safe
 #    to run against a database gunicorn is actively serving.
+#    Everything here runs as $RUN_AS: the deploy account's root sudo is limited to
+#    systemctl/journalctl for this one service, so `sudo mkdir` is not available.
 say "Backing up the database"
-sudo mkdir -p "$BACKUP_DIR"
-sudo chown "$RUN_AS":"$RUN_AS" "$BACKUP_DIR"
+asapp mkdir -p "$BACKUP_DIR"
 stamp=$(date +%Y%m%d-%H%M%S)
 asapp "$VENV_PY" - "$APP_DIR/db.sqlite3" "$BACKUP_DIR/db-$stamp.sqlite3" <<'PY'
 import sqlite3, sys

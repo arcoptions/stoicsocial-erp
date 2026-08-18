@@ -1,0 +1,4 @@
+# Shell scripts are executed on the Linux production server. A CRLF checkout breaks
+# the shebang ("bad interpreter: /usr/bin/env bash^M"), so keep them LF regardless of
+# the committer's core.autocrlf setting.
+*.sh text eol=lf
